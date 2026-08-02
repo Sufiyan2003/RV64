@@ -10,16 +10,12 @@ module tb;
 
 	logic clk;
 	logic resetn;
-	logic [63:0] o_instr_addr;
 
 
-	ProgramCounter PC(
-		.clk         	(clk),
-		.resetn      	(resetn),
-		.i_en_pc     	(1'b1),
-		.o_instr_addr	(o_instr_addr)
+	RV64_core rv64_cor(
+		.clk   	(clk),
+		.resetn	(resetn)
 	);
-
 
 	initial begin
 		clk = 0;

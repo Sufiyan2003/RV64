@@ -10,7 +10,7 @@ module ProgramCounter #(
 )(
 	input 				clk,    // Clock
 	input 				resetn,
-	input 				i_en_pc,
+	input 				i_stall,
 	output [WIDTH-1:0 ]	o_instr_addr
 );
 
@@ -21,7 +21,7 @@ module ProgramCounter #(
 		if(~resetn) begin
 			counter <= DEFAULT_VAL;
 		end else begin
-			if(i_en_pc) counter <= counter + 4		;
+			if(!i_stall) counter <= counter + 4		;
 			else 		counter <= counter 			;
 		end
 	end

@@ -174,23 +174,5 @@ module cache_top (
 		end
 	end
 
-	// now that we have detected a hit or a miss we need to see if we need to write it or not?
-	// always_ff @(posedge clk or negedge resetn) begin
-	//  	if(~resetn) begin
-	//  		write_tag_mem <= '0;
-	//  		write_data_mem <= '0;
-	//  	end else begin
-	//  		write_tag_mem <= '0;
-	//  		write_data_mem <= '0;
-	//  		if(i_write && i_req_valid) begin
-	//  			if(o_hit) begin
-	//  				write_data_mem[target_way] <= 1'b1;
-	//  			end
-	//  			else begin
-	//  				// what to do on miss (propogate the miss to the memory controller)
-	//  			end
-	//  		end
-	//  	end
-	//  end 
 
 endmodule : cache_top

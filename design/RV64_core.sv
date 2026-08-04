@@ -23,7 +23,7 @@ module RV64_core (
 	logic [DWIDTH-1:0] 		i_axi_rsp_line 		;
 	logic [ADDR_WIDTH-1:0]	o_instr_addr 		;
 	logic 					cache_write			;
-
+	logic 					cache_write_done 	;
 
 
 	/*------------------------------------------------------------------------------
@@ -58,7 +58,8 @@ module RV64_core (
 		.o_axi_req_addr 	(o_axi_req_addr) 	,
 		.i_axi_rsp_ready	(i_axi_rsp_ready) 	,
 		.i_axi_rsp_line 	(i_axi_rsp_line)    ,  // this line should be given to Icache
-		.o_write        	(cache_write)
+		.o_write        	(cache_write)       ,
+		.cache_write_done	(cache_write_done)
 	);
 
 
@@ -68,10 +69,11 @@ module RV64_core (
 		.i_data     		() 					, // right here
 		.i_address  		(o_instr_addr)		,
 		.i_write    		(cache_write)		, // this write should come from the controller when fetch cycle has finished
-		.i_req_valid		() 					, // is the instruction address valid
+		.i_req_valid		(1'b1) 					, // is the instruction address valid
 		.i_read     		()					, // read will come whenever its a valid req address
 		.o_data     		() 					, // the data to be transmitted out
 		.o_hit      		(i_cache_hit) 		, // to relay hit to controller
+		.o_write_done		(cache_write_done),
 		.o_miss     		(i_cache_miss) 		  // to relay miss to controller
 	);
 

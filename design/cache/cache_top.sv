@@ -16,6 +16,7 @@ module cache_top (
 	input [DWIDTH-1:0]  	i_data		,
 	output [DWIDTH-1:0] 	o_data 		,
 	output 	logic			o_hit 		,
+	output logic 			o_write_done ,
 	output 	logic			o_miss
 	
 );
@@ -34,7 +35,7 @@ module cache_top (
 
 	logic [DWIDTH-1:0] 		line_data [NUM_WAYS];
 	logic [TAG_WIDTH-1:0] 	tag_val   [NUM_WAYS];
-	logic 					invalid_line[NUM_WAYS];
+	logic [NUM_WAYS-1:0]	invalid_line 		;
 
 
 	logic read_tag_mem;
@@ -44,19 +45,22 @@ module cache_top (
 	logic write_tag_mem  	[NUM_WAYS];
 	logic write_data_mem 	[NUM_WAYS];
 	logic write_invalid_mem [NUM_WAYS];
-	logic write_valids      [NUM_WAYS];
 
 	// detect which way has the desired line
 	logic [$clog2(NUM_WAYS)-1:0] target_way;
-	logic [$clog2(NUM_WAYS)-1:0] free_way;
-	logic free_way_found;
+	logic [$clog2(NUM_WAYS)-1:0] write_to_inv_way;
 	logic [$clog2(NUM_WAYS)-1:0] write_way;
+	logic found_invalid_way;
+
+	logic [$clog2(NUM_WAYS)-1:0] lru_victim_way;
+	logic [$clog2(NUM_WAYS)-1:0] fill_way;
+
 
 	// generate the number of memory wrappers as there are number of ways
 	genvar i;
 	generate
 		// data storage
-		for (i = 0; i < NUM_WAYS; i++) begin
+		for (i = 0; i < NUM_WAYS; i++) begin : data_block
 			memwrap #(
 				.DWIDTH    (DWIDTH),
 				.ADDR_WIDTH(ADDR_WIDTH),
@@ -73,7 +77,7 @@ module cache_top (
 		end
 
 		// for storing tags
-		for (i = 0; i < NUM_WAYS; i++) begin
+		for (i = 0; i < NUM_WAYS; i++) begin : tag_set
 			memwrap #(
 				.DWIDTH    (TAG_WIDTH),
 				.ADDR_WIDTH(ADDR_WIDTH),
@@ -90,7 +94,7 @@ module cache_top (
 		end
 
 		// for storing valids
-		for (i = 0; i < NUM_WAYS; i++) begin
+		for (i = 0; i < NUM_WAYS; i++) begin : valid_set
 			memwrap #(
 				.ADDR_WIDTH(ADDR_WIDTH),
 				.DEPTH     (DEPTH),
@@ -99,7 +103,7 @@ module cache_top (
 			) invalid_mem(
 				.clk     (clk) 						,
 				.resetn  (resetn) 					,
-				.i_data  (write_valids[i]) 			,
+				.i_data  (1'b0) 					,
 				.i_addr  (line_number) 				,
 				.o_data  (invalid_line[i]) 			,
 				.read_en (read_valid_mem)   		,
@@ -108,7 +112,7 @@ module cache_top (
 		end
 
 		// for storing dirty bits
-		for (i = 0; i < NUM_WAYS; i++) begin
+		for (i = 0; i < NUM_WAYS; i++) begin : dirty_bits
 			memwrap #(
 				.ADDR_WIDTH(ADDR_WIDTH),
 				.DEPTH     (DEPTH),
@@ -125,6 +129,19 @@ module cache_top (
 		end
 
 	endgenerate
+
+
+	/*------------------------------------------------------------------------------
+	--  							LRU detector
+	------------------------------------------------------------------------------*/
+	lru_detector lru_detect(
+		.clk         (clk),
+		.resetn      (resetn),
+		.access_valid(i_req_valid && (o_hit || (i_write && o_miss))),
+		.access_set  (line_number),
+		.access_way  (o_hit ? target_way : fill_way),
+		.victim_way  (lru_victim_way)
+	);
 
 
 	always_comb begin
@@ -164,21 +181,46 @@ module cache_top (
 
 
 
-
-
-	// TODO: this block is only for initial testing- need to replace with a correct replacement scheme
+	// check which is the target way if any line is invalid
 	always_comb begin
-		free_way_found = '0;
-		free_way = '0;
+		write_to_inv_way = '0;
+		found_invalid_way = 0;
 		for (int i = 0; i < NUM_WAYS; i++) begin
-			if(invalid_line[i] && !free_way_found) begin
-				free_way  = i[$clog2(NUM_WAYS)-1:0];
-				free_way_found = 1'b1;
+			if(invalid_line[i] == 1'b1) begin 
+				write_to_inv_way = i; 
+				found_invalid_way = 1'b1;
 			end
 		end
 	end
 
-	// detemine which bank im supposed to write it
+
+	// check if any line is invalid just write it in
+	always_ff @(posedge clk or negedge resetn) begin
+	    if (~resetn) begin
+	    	o_write_done <= 1'b0;
+	        for (int i = 0; i < NUM_WAYS; i++) begin
+	            write_tag_mem[i]     <= 1'b0;
+	            write_invalid_mem[i] <= 1'b0;
+	            write_data_mem[i]    <= 1'b0;
+	        end
+	    end else begin
+	        for (int i = 0; i < NUM_WAYS; i++) begin
+	            write_tag_mem[i]     <= 1'b0;
+	            write_invalid_mem[i] <= 1'b0;
+	            write_data_mem[i]    <= 1'b0;
+	        end
+	        if (i_write && i_req_valid && o_miss) begin
+	            // fill_way already picks invalid-way-first, else LRU victim
+	            write_tag_mem[fill_way]     <= 1'b1;
+	            write_invalid_mem[fill_way] <= 1'b1;
+	            write_data_mem[fill_way]    <= 1'b1;
+	            o_write_done <= 1'b1;
+	        end
+	        else begin
+	        	o_write_done <= 1'b0;
+	        end
+	    end
+	end
 
 
 endmodule : cache_top

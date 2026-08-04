@@ -7,23 +7,25 @@
 
 `include "cache_params.svh"
 module cache_controller (
-	input 					clk					,
-	input					resetn				,
-	input [ADDR_WIDTH-1:0] 	i_pc				,
-	output logic 			o_instr_addr		,
-	output logic 			o_read_valid		,
-	input					i_cache_hit			,
-	input 					i_cache_miss		,
-	output 					o_axi_req_valid		,
-	output [ADDR_WIDTH-1:0] o_axi_req_addr		,
-	input 					i_axi_rsp_ready		,
-	input  [DWIDTH-1:0] 	i_axi_rsp_line 		,
-	output logic 			o_stall_pc
+	input 							clk					,
+	input							resetn				,
+	input [ADDR_WIDTH-1:0] 			i_pc				,
+	output logic [ADDR_WIDTH-1:0]	o_instr_addr		,
+	output logic 					o_read_valid		,
+	input							i_cache_hit			,
+	input 							i_cache_miss		,
+	output logic					o_axi_req_valid		,
+	output [ADDR_WIDTH-1:0] 		o_axi_req_addr		,
+	input 							i_axi_rsp_ready		,
+	input  [DWIDTH-1:0] 			i_axi_rsp_line 		,
+	output logic 					o_stall_pc 			,
+	output 							o_write 
 );
 
 	logic [ADDR_WIDTH:0] pc_q 	;
 	logic propogate_fetch_req 	;
 	logic cache_write_done 		;
+	logic write_line_to_cache	;
 
 	typedef enum logic [3:0] {
 		IDLE 			, 
@@ -46,12 +48,13 @@ module cache_controller (
 		else 							o_read_valid = 1'b1;
 	end
 
+	// stalling the PC to give cache enough time to process address
 	always_ff @(posedge clk or negedge resetn) begin
 		if(~resetn) begin
-			o_stall_pc <= 0;
+			o_stall_pc <= 1'b1;
 		end else begin
-			if(cache_state == CACHE_OUTPUT) o_stall_pc <= 1'b0;
-			else if(cache_state != IDLE)    o_stall_pc <= 1'b1;
+			if(cache_state != IDLE) o_stall_pc <= 1'b1;
+			else 					o_stall_pc <= 1'b0;
 		end
 	end
 
@@ -73,12 +76,12 @@ module cache_controller (
 				else 					cache_state_nxt = IDLE;
 			end
 			SEARCH_CACHE: begin
-				cache_state_nxt = SEARCH_CACHE; // CURRENTLY NEED TO SEE IF IT CAN SEARCH THE CACHE
 				if(i_cache_hit) cache_state_nxt = CACHE_HIT;
 				else if(i_cache_miss) cache_state_nxt = CACHE_MISS;
 				else cache_state_nxt = SEARCH_CACHE;
 			end
-			// CACHE_HIT:
+			// CACHE_HIT: begin
+			// end
 			CACHE_MISS: begin
 				// wait till the axi responder has the full line and then move to output cache
 				if(propogate_fetch_req) cache_state_nxt = FETCH 	;
@@ -97,6 +100,7 @@ module cache_controller (
 		endcase
 	end
 
+	// state issue request to the axi master
 	always_ff @(posedge clk or negedge resetn) begin
 		if(~resetn) begin
 			propogate_fetch_req <= 0;
@@ -106,9 +110,29 @@ module cache_controller (
 		end
 	end
 
+	// to the controller once it has a full line available
+	always_ff @(posedge clk or negedge resetn) begin
+		if(~resetn) begin
+			o_axi_req_valid <= 0;
+		end else begin
+			if(cache_state == FETCH) 	o_axi_req_valid <= 1'b1;
+			else 						o_axi_req_valid <= 1'b0;
+		end
+	end
 
+
+	// in case it needs to write to the cache
+	always_ff @(posedge clk or negedge resetn) begin : proc_
+		if(~resetn) begin
+			write_line_to_cache <= 1'b0;
+		end else begin
+			if(cache_state == WRITE_TO_CACHE) 	write_line_to_cache <= 1'b1;
+			else 								write_line_to_cache <= 1'b0;
+		end
+	end
 
 	// TODO: must come from a fifo if cache is in miss state
 	assign o_instr_addr = i_pc; 
+	assign o_write = write_line_to_cache;
 
 endmodule : cache_controller

@@ -5,14 +5,27 @@
 -- TODO: must have an axi interface to communicate with the L2 cache
 ------------------------------------------------------------------------------*/
 
+`include "cache_params.svh"
 module RV64_core (
 	input clk,
 	input resetn
 );
 
 
-	logic [63:0] instr_addr;
-	logic o_read_valid;
+	logic [63:0] 			instr_addr 			;
+	logic 					o_read_valid 		;
+	logic 					o_stall_pc 			;
+	logic 					i_cache_hit 		;
+	logic 					i_cache_miss 		;
+	logic 					o_axi_req_valid 	;
+	logic [ADDR_WIDTH-1:0] 	o_axi_req_addr 		; 
+	logic 					i_axi_rsp_ready 	;
+	logic [DWIDTH-1:0] 		i_axi_rsp_line 		;
+	logic [ADDR_WIDTH-1:0]	o_instr_addr 		;
+	logic 					cache_write			;
+
+
+
 	/*------------------------------------------------------------------------------
 	--  						Instruction Fetch
 	------------------------------------------------------------------------------*/
@@ -27,23 +40,44 @@ module RV64_core (
 	);
 
 
-	cache_controller Icache_controller(
-		.clk         (clk)				,
-		.resetn      (resetn)			,
-		.i_pc        (instr_addr)		,
-		.o_read_valid(o_read_valid)		,
-		.o_instr_addr(instr_addr)		,
-		.o_stall_pc  (o_stall_pc)
+
+	/*------------------------------------------------------------------------------
+	--  					Cache to store instructions
+	------------------------------------------------------------------------------*/
+	// TODO: make all cache controllers and memory wrappers into one top level cache
+	cache_controller Icache_controller 	(
+		.clk         		(clk)				,
+		.resetn      		(resetn)			,
+		.i_pc        		(instr_addr)		,
+		.o_read_valid		(o_read_valid)		,
+		.o_instr_addr		(o_instr_addr)		,
+		.o_stall_pc  		(o_stall_pc)		,
+		.i_cache_hit 		(i_cache_hit) 		,
+		.i_cache_miss   	(i_cache_miss) 		,
+		.o_axi_req_valid	(o_axi_req_valid) 	,
+		.o_axi_req_addr 	(o_axi_req_addr) 	,
+		.i_axi_rsp_ready	(i_axi_rsp_ready) 	,
+		.i_axi_rsp_line 	(i_axi_rsp_line)    ,  // this line should be given to Icache
+		.o_write        	(cache_write)
 	);
 
 
 	cache_top Icache (
-		.clk        (clk)				,
-		.resetn     (resetn)			,
-		.i_data     () 					
+		.clk        		(clk)				,
+		.resetn     		(resetn)			,
+		.i_data     		() 					, // right here
+		.i_address  		(o_instr_addr)		,
+		.i_write    		(cache_write)		, // this write should come from the controller when fetch cycle has finished
+		.i_req_valid		() 					, // is the instruction address valid
+		.i_read     		()					, // read will come whenever its a valid req address
+		.o_data     		() 					, // the data to be transmitted out
+		.o_hit      		(i_cache_hit) 		, // to relay hit to controller
+		.o_miss     		(i_cache_miss) 		  // to relay miss to controller
 	);
 
-
+	/*------------------------------------------------------------------------------
+	--  	TODO: An AXI-4 wrapper to take beats and form a complete line
+	------------------------------------------------------------------------------*/
 
 
 endmodule : RV64_core

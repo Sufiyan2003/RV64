@@ -16,7 +16,7 @@ module cache_top (
 	input [DWIDTH-1:0]  	i_data		,
 	output [DWIDTH-1:0] 	o_data 		,
 	output 	logic			o_hit 		,
-	output 					o_miss
+	output 	logic			o_miss
 	
 );
 
@@ -48,6 +48,9 @@ module cache_top (
 
 	// detect which way has the desired line
 	logic [$clog2(NUM_WAYS)-1:0] target_way;
+	logic [$clog2(NUM_WAYS)-1:0] free_way;
+	logic free_way_found;
+	logic [$clog2(NUM_WAYS)-1:0] write_way;
 
 	// generate the number of memory wrappers as there are number of ways
 	genvar i;
@@ -134,6 +137,9 @@ module cache_top (
 				target_way = i;
 			end 
 		end
+
+		if(o_hit == 1'b0) o_miss = 1'b1;
+		else 			  o_miss = 1'b0;
 	end
 
 	// check if there is a tag match to indicate hit
@@ -143,7 +149,7 @@ module cache_top (
 			read_data_mem <= 1'b0;
 			read_valid_mem <= 1'b0;
 		end else begin
-			if((i_read || i_write) && i_req_valid) begin
+			if(i_read && i_req_valid) begin
 				read_tag_mem <= 1'b1;
 				read_data_mem <= 1'b1;
 				read_valid_mem <= 1'b1;
@@ -158,8 +164,6 @@ module cache_top (
 
 
 
-	logic [$clog2(NUM_WAYS)-1:0] free_way;
-	logic free_way_found;
 
 
 	// TODO: this block is only for initial testing- need to replace with a correct replacement scheme
@@ -173,6 +177,8 @@ module cache_top (
 			end
 		end
 	end
+
+	// detemine which bank im supposed to write it
 
 
 endmodule : cache_top

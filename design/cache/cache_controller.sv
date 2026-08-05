@@ -122,7 +122,7 @@ module cache_controller (
 		if(~resetn) begin
 			o_axi_req_valid <= 0;
 		end else begin
-			if(cache_state == FETCH) 	o_axi_req_valid <= 1'b1;
+			if(cache_state == CACHE_MISS && cache_state_nxt == FETCH) 	o_axi_req_valid <= 1'b1;
 			else 						o_axi_req_valid <= 1'b0;
 		end
 	end
@@ -131,16 +131,10 @@ module cache_controller (
 	// in case it needs to write to the cache
 	always_ff @(posedge clk or negedge resetn) begin
 		if(~resetn) begin
-			write_line_to_cache <= 1'b0;
 			o_cache_line <= '0;
 		end else begin
-			if(cache_state == WRITE_TO_CACHE) begin	
-				write_line_to_cache <= 1'b1; 
+			if(cache_state == FETCH && i_axi_rsp_ready) begin	
 				o_cache_line <= i_axi_rsp_line;
-			end
-			else begin 
-				write_line_to_cache <= 1'b0; 
-				o_cache_line <= '0;
 			end
 		end
 	end
@@ -148,5 +142,5 @@ module cache_controller (
 	// TODO: must come from a fifo if cache is in miss state
 	// assign o_instr_addr = i_pc; 
 	assign o_write = write_line_to_cache;
-
+	assign write_line_to_cache = (cache_state == WRITE_TO_CACHE);
 endmodule : cache_controller

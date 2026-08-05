@@ -69,7 +69,7 @@ module cache_top (
 				.clk     (clk) 					,
 				.resetn  (resetn) 				,
 				.write_en(write_data_mem[i]) 	,			// write to memory if its a hit
-				.read_en (read_data_mem) 		,			// ready from memory to throw it as an output 
+				.read_en (i_read) 		,			// ready from memory to throw it as an output 
 				.i_addr  (line_number) 			,			// give it the line number
 				.i_data  (i_data) 				,
 				.o_data  (line_data[i])
@@ -88,7 +88,7 @@ module cache_top (
 				.i_data  (tag_value) 		,
 				.i_addr  (line_number) 		,
 				.o_data  (tag_val[i]) 		,
-				.read_en (read_tag_mem) 	,   			// read it to detect hit or miss
+				.read_en (i_read) 	,   			// read it to detect hit or miss
 				.write_en(write_tag_mem[i])
 			);
 		end
@@ -106,7 +106,7 @@ module cache_top (
 				.i_data  (1'b0) 					,
 				.i_addr  (line_number) 				,
 				.o_data  (invalid_line[i]) 			,
-				.read_en (read_valid_mem)   		,
+				.read_en (i_read)   		,
 				.write_en(write_invalid_mem[i])
 			);
 		end
@@ -132,19 +132,6 @@ module cache_top (
 
 
 	/*------------------------------------------------------------------------------
-	--  			Keeping track of read data from the memories
-	------------------------------------------------------------------------------*/
-	logic tag_block_valid	;
-	always_ff @(posedge clk or negedge resetn) begin
-		if(~resetn) begin
-			tag_block_valid <= 0;
-		end else begin
-			if(i_read) 	tag_block_valid <= 1'b1;
-			else 		tag_block_valid <= 1'b0;
-		end
-	end
-
-	/*------------------------------------------------------------------------------
 	--  							LRU detector
 	------------------------------------------------------------------------------*/
 	lru_detector lru_detect(
@@ -157,20 +144,34 @@ module cache_top (
 	);
 
 
+	logic lookup_valid;
+
+	always_ff @(posedge clk or negedge resetn) begin
+	    if(!resetn)
+	        lookup_valid <= 1'b0;
+	    else
+	        lookup_valid <= i_read;
+	end
+
+
+	assign o_miss = lookup_valid && !o_hit;
+
+	/*------------------------------------------------------------------------------
+	--  						Detecting Hit or miss
+	------------------------------------------------------------------------------*/
 	always_comb begin
 		o_hit = 1'b0;
 		target_way = '0;
-		for (int i = 0; i < NUM_WAYS; i++) begin
-			// its a hit if its valid and the tags match
-			if(~invalid_line[i] && (tag_val[i] == tag_value) && tag_block_valid) begin
-				o_hit = 1'b1;
-				target_way = i;
-			end 
+		if(lookup_valid) begin
+			for (int i = 0; i < NUM_WAYS; i++) begin
+				if(!invalid_line[i] && (tag_val[i] == tag_value)) begin
+					o_hit = 1'b1;
+					target_way = i;
+				end
+			end
 		end
-
-		if(o_hit == 1'b0 && tag_block_valid) 	o_miss = 1'b1;
-		else 			  						o_miss = 1'b0;
 	end
+
 
 	// check if there is a tag match to indicate hit
 	always_ff @(posedge clk or negedge resetn) begin
@@ -223,7 +224,7 @@ module cache_top (
 	            write_invalid_mem[i] <= 1'b0;
 	            write_data_mem[i]    <= 1'b0;
 	        end
-	        if (i_write && o_miss) begin
+	        if (i_write) begin
 	            // fill_way already picks invalid-way-first, else LRU victim
 	            write_tag_mem[fill_way]     <= 1'b1;
 	            write_invalid_mem[fill_way] <= 1'b1;

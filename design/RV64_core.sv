@@ -14,6 +14,7 @@ module RV64_core (
 
 	logic [63:0] 			instr_addr 			;
 	logic 					o_read_valid 		;
+	logic 					address_valid 		;
 	logic 					o_stall_pc 			;
 	logic 					i_cache_hit 		;
 	logic 					i_cache_miss 		;
@@ -24,7 +25,7 @@ module RV64_core (
 	logic [ADDR_WIDTH-1:0]	o_instr_addr 		;
 	logic 					cache_write			;
 	logic 					cache_write_done 	;
-
+	logic [DWIDTH-1:0] 		cache_line_in 		;
 
 	/*------------------------------------------------------------------------------
 	--  						Instruction Fetch
@@ -36,7 +37,8 @@ module RV64_core (
 		.clk         (clk)			,
 		.resetn      (resetn)		,
 		.i_stall     (o_stall_pc)	,
-		.o_instr_addr(instr_addr)
+		.o_instr_addr(instr_addr) 	,
+		.o_req_valid (address_valid)
 	);
 
 
@@ -59,18 +61,20 @@ module RV64_core (
 		.i_axi_rsp_ready	(i_axi_rsp_ready) 	,
 		.i_axi_rsp_line 	(i_axi_rsp_line)    ,  // this line should be given to Icache
 		.o_write        	(cache_write)       ,
-		.cache_write_done	(cache_write_done)
+		.cache_write_done	(cache_write_done)  ,
+		.o_cache_line    	(cache_line_in) 	,
+		.i_req_valid     	(address_valid)
 	);
 
 
 	cache_top Icache (
 		.clk        		(clk)				,
 		.resetn     		(resetn)			,
-		.i_data     		() 					, // right here
+		.i_data     		(cache_line_in)		, // right here
 		.i_address  		(o_instr_addr)		,
 		.i_write    		(cache_write)		, // this write should come from the controller when fetch cycle has finished
-		.i_req_valid		(1'b1) 					, // is the instruction address valid
-		.i_read     		()					, // read will come whenever its a valid req address
+		.i_req_valid		(1'b1) 				, // is the instruction address valid
+		.i_read     		(o_read_valid)		, // read will come whenever its a valid req address
 		.o_data     		() 					, // the data to be transmitted out
 		.o_hit      		(i_cache_hit) 		, // to relay hit to controller
 		.o_write_done		(cache_write_done),

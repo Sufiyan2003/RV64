@@ -10,6 +10,7 @@ module cache_controller (
 	input 							clk					,
 	input							resetn				,
 	input [ADDR_WIDTH-1:0] 			i_pc				,
+	input 							i_req_valid 		,
 	output logic [ADDR_WIDTH-1:0]	o_instr_addr		,
 	output logic 					o_read_valid		,
 	input							i_cache_hit			,
@@ -18,6 +19,7 @@ module cache_controller (
 	output [ADDR_WIDTH-1:0] 		o_axi_req_addr		,
 	input 							i_axi_rsp_ready		,
 	input  [DWIDTH-1:0] 			i_axi_rsp_line 		,
+	output logic [DWIDTH-1:0]		o_cache_line 		,
 	output logic 					o_stall_pc 			,
 	output 							o_write 			,
 	input 							cache_write_done
@@ -27,6 +29,7 @@ module cache_controller (
 	logic propogate_fetch_req 	;
 	logic write_line_to_cache	;
 
+	logic req_accepted 			;
 	typedef enum logic [3:0] {
 	    IDLE 			, 
 	    SEARCH_CACHE 	, 
@@ -39,12 +42,18 @@ module cache_controller (
 
 	controller_state_e cache_state, cache_state_nxt;
 
+	assign req_accepted  = (cache_state == IDLE) && i_req_valid; 
+	always_ff @(posedge clk or negedge resetn) begin
+		if(~resetn) o_instr_addr <= '0;
+		else if(req_accepted) o_instr_addr <= i_pc;
+		else o_instr_addr <= o_instr_addr;
+	end
 	/*------------------------------------------------------------------------------
 	--  		Stalling PC when controller limit is reached (limit is 1)
 	------------------------------------------------------------------------------*/
 	always_comb begin
-	    if(cache_state == SEARCH_CACHE) o_read_valid = 1'b0;
-	    else 							 o_read_valid = 1'b1;
+	    if(cache_state == SEARCH_CACHE) o_read_valid = 1'b1;
+	    else 							 o_read_valid = 1'b0;
 	end
 
 	// stalling the PC to give cache enough time to process address
@@ -120,17 +129,24 @@ module cache_controller (
 
 
 	// in case it needs to write to the cache
-	always_ff @(posedge clk or negedge resetn) begin : proc_
+	always_ff @(posedge clk or negedge resetn) begin
 		if(~resetn) begin
 			write_line_to_cache <= 1'b0;
+			o_cache_line <= '0;
 		end else begin
-			if(cache_state == WRITE_TO_CACHE) 	write_line_to_cache <= 1'b1;
-			else 								write_line_to_cache <= 1'b0;
+			if(cache_state == WRITE_TO_CACHE) begin	
+				write_line_to_cache <= 1'b1; 
+				o_cache_line <= i_axi_rsp_line;
+			end
+			else begin 
+				write_line_to_cache <= 1'b0; 
+				o_cache_line <= '0;
+			end
 		end
 	end
 
 	// TODO: must come from a fifo if cache is in miss state
-	assign o_instr_addr = i_pc; 
+	// assign o_instr_addr = i_pc; 
 	assign o_write = write_line_to_cache;
 
 endmodule : cache_controller

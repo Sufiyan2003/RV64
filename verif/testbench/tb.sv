@@ -46,7 +46,7 @@ module tb;
 			wait(rv64_cor.Icache_controller.o_axi_req_valid);
 			@(posedge clk);
 			force rv64_cor.Icache_controller.i_axi_rsp_ready = 1'b1;
-			force rv64_cor.Icache_controller.i_axi_rsp_line = $random();
+			force rv64_cor.Icache_controller.i_axi_rsp_line = {$random(),$random(),$random(),$random(),$random(),$random(),$random(),$random(),$random(), $random(), $random(), $random(), $random(),$random(),$random(),$random()};
 			@(posedge clk);
 			force rv64_cor.Icache_controller.i_axi_rsp_ready = 1'b0;
 			force rv64_cor.Icache_controller.i_axi_rsp_line = '0;

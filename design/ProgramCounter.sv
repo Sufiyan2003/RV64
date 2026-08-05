@@ -8,9 +8,10 @@ module ProgramCounter #(
 	parameter WIDTH=64,
 	parameter [WIDTH-1 : 0] DEFAULT_VAL = {WIDTH{1'b0}}
 )(
-	input 				clk,    // Clock
-	input 				resetn,
-	input 				i_stall,
+	input 				clk 			,    // Clock
+	input 				resetn			,
+	input 				i_stall			,
+	output 				o_req_valid 	,
 	output [WIDTH-1:0 ]	o_instr_addr
 );
 
@@ -27,5 +28,6 @@ module ProgramCounter #(
 	end
 
 	assign o_instr_addr = counter;
+	assign o_req_valid = ~i_stall;
 
 endmodule : ProgramCounter

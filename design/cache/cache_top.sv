@@ -132,14 +132,27 @@ module cache_top (
 
 
 	/*------------------------------------------------------------------------------
+	--  			Keeping track of read data from the memories
+	------------------------------------------------------------------------------*/
+	logic tag_block_valid	;
+	always_ff @(posedge clk or negedge resetn) begin
+		if(~resetn) begin
+			tag_block_valid <= 0;
+		end else begin
+			if(i_read) 	tag_block_valid <= 1'b1;
+			else 		tag_block_valid <= 1'b0;
+		end
+	end
+
+	/*------------------------------------------------------------------------------
 	--  							LRU detector
 	------------------------------------------------------------------------------*/
 	lru_detector lru_detect(
-		.clk         (clk),
-		.resetn      (resetn),
-		.access_valid(i_req_valid && (o_hit || (i_write && o_miss))),
-		.access_set  (line_number),
-		.access_way  (o_hit ? target_way : fill_way),
+		.clk         (clk)	 							,
+		.resetn      (resetn)							,
+		.access_valid(o_hit || (i_write && o_miss))		,
+		.access_set  (line_number)						,
+		.access_way  (o_hit ? target_way : fill_way)	,
 		.victim_way  (lru_victim_way)
 	);
 
@@ -149,14 +162,14 @@ module cache_top (
 		target_way = '0;
 		for (int i = 0; i < NUM_WAYS; i++) begin
 			// its a hit if its valid and the tags match
-			if(~invalid_line[i] && (tag_val[i] == tag_value)) begin
+			if(~invalid_line[i] && (tag_val[i] == tag_value) && tag_block_valid) begin
 				o_hit = 1'b1;
 				target_way = i;
 			end 
 		end
 
-		if(o_hit == 1'b0) o_miss = 1'b1;
-		else 			  o_miss = 1'b0;
+		if(o_hit == 1'b0 && tag_block_valid) 	o_miss = 1'b1;
+		else 			  						o_miss = 1'b0;
 	end
 
 	// check if there is a tag match to indicate hit
@@ -166,7 +179,7 @@ module cache_top (
 			read_data_mem <= 1'b0;
 			read_valid_mem <= 1'b0;
 		end else begin
-			if(i_read && i_req_valid) begin
+			if(i_read) begin
 				read_tag_mem <= 1'b1;
 				read_data_mem <= 1'b1;
 				read_valid_mem <= 1'b1;
@@ -183,14 +196,15 @@ module cache_top (
 
 	// check which is the target way if any line is invalid
 	always_comb begin
-		write_to_inv_way = '0;
-		found_invalid_way = 0;
-		for (int i = 0; i < NUM_WAYS; i++) begin
-			if(invalid_line[i] == 1'b1) begin 
-				write_to_inv_way = i; 
-				found_invalid_way = 1'b1;
-			end
-		end
+	    write_to_inv_way = '0;
+	    found_invalid_way = 1'b0;
+	    for (int i = 0; i < NUM_WAYS; i++) begin
+	        if (invalid_line[i] && !found_invalid_way) begin
+	            write_to_inv_way = i[$clog2(NUM_WAYS)-1:0];
+	            found_invalid_way = 1'b1;
+	        end
+	    end
+	    fill_way = found_invalid_way ? write_to_inv_way : lru_victim_way;
 	end
 
 
@@ -209,7 +223,7 @@ module cache_top (
 	            write_invalid_mem[i] <= 1'b0;
 	            write_data_mem[i]    <= 1'b0;
 	        end
-	        if (i_write && i_req_valid && o_miss) begin
+	        if (i_write && o_miss) begin
 	            // fill_way already picks invalid-way-first, else LRU victim
 	            write_tag_mem[fill_way]     <= 1'b1;
 	            write_invalid_mem[fill_way] <= 1'b1;

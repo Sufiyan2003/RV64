@@ -139,6 +139,9 @@ module cache_controller (
 		end
 	end
 
+
+	assign o_axi_req_addr = (propogate_fetch_req == 1) ? i_pc : '0;
+
 	// TODO: must come from a fifo if cache is in miss state
 	// assign o_instr_addr = i_pc; 
 	assign o_write = write_line_to_cache;

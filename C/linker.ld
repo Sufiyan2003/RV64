@@ -5,7 +5,7 @@
 
 MEMORY
 {
-    RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 64K
+    RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 4K
 }
 
 ENTRY(_start)

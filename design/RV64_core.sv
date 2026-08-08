@@ -27,6 +27,12 @@ module RV64_core (
 	logic 					cache_write_done 	;
 	logic [DWIDTH-1:0] 		cache_line_in 		;
 
+
+	// interfaces
+	axi4_intf axi_if(clk, resetn);
+
+
+
 	/*------------------------------------------------------------------------------
 	--  						Instruction Fetch
 	------------------------------------------------------------------------------*/
@@ -84,6 +90,13 @@ module RV64_core (
 	/*------------------------------------------------------------------------------
 	--  	TODO: An AXI-4 wrapper to take beats and form a complete line
 	------------------------------------------------------------------------------*/
-
+	axi_cache_requester axi_icache_master(
+		.clk        (clk),
+		.resetn     (resetn),
+		.i_axi_addr (o_instr_addr),
+		.i_axi_fetch(o_axi_req_valid),
+		.i_axi_evict(),
+		.axi_if     (axi_if)
+	);
 
 endmodule : RV64_core

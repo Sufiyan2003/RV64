@@ -3,7 +3,7 @@
 
 // memory wrapper paramaters
 localparam DWIDTH = 512;
-localparam ADDR_WIDTH=64;
+localparam ADDR_WIDTH=32;
 localparam DEPTH  = 16;
 
 // CACHE paramaters

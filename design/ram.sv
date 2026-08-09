@@ -21,7 +21,7 @@
 module ram #(
     parameter          BASE_ADDR  = 64'h0000000080000000,
     parameter integer  MEM_BYTES  = 65536,              // 64KB default
-    parameter integer  ADDR_WIDTH = 32                  // width of addr input port
+    parameter integer  ADDR_WIDTH = 16                  // width of addr input port
 ) (
     input  wire                    clk,
     input  wire                    rst_n,
@@ -31,7 +31,8 @@ module ram #(
     output reg  [63:0]             rdata,
     input  wire                    we,         // write enable (overall)
     input  wire [7:0]              byte_en,    // per-byte write enable, bit i = byte i
-    input  wire                    re          // read enable
+    input  wire                    re     ,    // read enable
+    output                         ready
 );
 
     // Byte-wide memory array -- index i holds byte at (BASE_ADDR + i)
@@ -65,6 +66,7 @@ module ram #(
         end
     end
 
+    assign ready = ((we && re) == '0) ? 1'b1 : 1'b0;
     // ------------------------------------------------------------------
     // Simulation-only preload support.
     //

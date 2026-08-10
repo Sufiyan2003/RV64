@@ -45,15 +45,16 @@ module ram_axi_wrapper (
 		r_next_state = r_current_state;
 		case (r_current_state)
 			RIDLE: begin
-				if(axi_if.ARVALID) r_next_state = AR;
-				else  			   r_next_state = RIDLE;
+				if(axi_if.ARVALID) 		r_next_state = AR 		;
+				else  			   		r_next_state = RIDLE	;
 			end
 			AR: begin
-				if(!incoming_rd_req) 	r_next_state = R;
-				else 					r_next_state = AR;
+				if(!incoming_rd_req) 	r_next_state = R		;
+				else 					r_next_state = AR		;
 			end
 			R: begin
-
+				if(axi_if.WLAST) 		r_next_state = RIDLE	;
+				else 					r_next_state = R		;
 			end
 
 		endcase
@@ -95,28 +96,31 @@ module ram_axi_wrapper (
 	end
 
 
+	always_comb begin
+		re = (r_current_state ==R) && (num_bytes < tr_len);
+	end
+
+
 	// COUNTER TO READ FROM RAM
 	always_ff @(posedge clk or negedge resetn) begin
 		if(~resetn) begin
-			num_bytes <= 0;
-			re <= '0;
+			num_bytes <= '0;
 		end else begin
-			if(r_current_state == R && (num_bytes < tr_len)) begin
-				num_bytes <= num_bytes + 1;
-				re <= 1'b1;
-			end
-			else begin
-				num_bytes <= num_bytes;
-				re <= '0;
-			end
+			if(re) num_bytes <= num_bytes + 1;
+			else if(r_current_state != R) num_bytes <= '0;
+			else num_bytes <= num_bytes;
 		end
 	end
 
 
 
-	assign axi_if.AREADY = ram_ready;
-	assign o_ram_off = addr + num_bytes;
-	assign axi_if.WLAST = (num_bytes == tr_len);
+	assign axi_if.AREADY 	= ram_ready;
+	assign axi_if.RREADY    = (r_current_state == R);
+	assign o_ram_off 		= addr + num_bytes;
+	assign axi_if.WLAST 	= (num_bytes == tr_len);
+	assign axi_if.WSTRB 	= '1; // keep this strobe as always 1
+	assign axi_if.WDATA 	= read_data;
+	assign axi_if.WUSER     = '0;  // dont really care about this for now
 
-
+	assign we = '0;
 endmodule : ram_axi_wrapper

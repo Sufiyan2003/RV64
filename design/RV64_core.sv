@@ -7,8 +7,9 @@
 
 `include "cache_params.svh"
 module RV64_core (
-	input clk,
-	input resetn
+	input clk 				,
+	input resetn 			,
+	axi4_intf.master axi_if
 );
 
 
@@ -26,10 +27,6 @@ module RV64_core (
 	logic 					cache_write			;
 	logic 					cache_write_done 	;
 	logic [DWIDTH-1:0] 		cache_line_in 		;
-
-
-	// interfaces
-	axi4_intf axi_if(clk, resetn);
 
 
 

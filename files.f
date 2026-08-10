@@ -1,5 +1,6 @@
 +incdir+./design
 +incdir+./design/cache
++incdir+./design/ram
 +incdir+./design/interfaces
 +incdir+./verif
 +incdir+./verif/testbench
@@ -22,4 +23,5 @@
 ./design/ram.sv
 ./design/axi_cache_requester.sv
 ./design/RV64_core.sv
+./design/RV64_soc.sv
 ./verif/testbench/tb.sv

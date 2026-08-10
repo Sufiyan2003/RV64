@@ -39,7 +39,7 @@ module ram #(
     reg [7:0] mem [0:MEM_BYTES-1];
 
     // Local (offset) address relative to BASE_ADDR
-    wire [ADDR_WIDTH-1:0] local_addr = addr - BASE_ADDR[ADDR_WIDTH-1:0];
+    // wire [ADDR_WIDTH-1:0] local_addr = addr - BASE_ADDR[ADDR_WIDTH-1:0];
 
     integer i;
 
@@ -51,24 +51,24 @@ module ram #(
             if (we) begin
                 for (i = 0; i < 8; i = i + 1) begin
                     if (byte_en[i]) begin
-                        mem[local_addr + i] <= wdata[i*8 +: 8];
+                        mem[addr + i] <= wdata[i*8 +: 8];
                     end
                 end
             end
 
             // Synchronous read: assemble 64-bit word from 8 consecutive bytes
             if (re) begin
-                rdata <= { mem[local_addr+7], mem[local_addr+6],
-                           mem[local_addr+5], mem[local_addr+4],
-                           mem[local_addr+3], mem[local_addr+2],
-                           mem[local_addr+1], mem[local_addr+0] };
+                rdata <= { mem[addr+7], mem[addr+6],
+                           mem[addr+5], mem[addr+4],
+                           mem[addr+3], mem[addr+2],
+                           mem[addr+1], mem[addr+0] };
             end
         end
     end
 
     assign ready = ((we && re) == '0) ? 1'b1 : 1'b0;
     // ------------------------------------------------------------------
-    // Simulation-only preload support.
+    //   Simulation-only preload support.
     //
     // From your testbench, load firmware like this (hierarchical path
     // depends on your instance names in soc_top):
@@ -86,10 +86,7 @@ module ram #(
     // read as 0 instead of X (makes waveform debugging much easier).
     // synthesis translate_off
     initial begin
-        for (i = 0; i < MEM_BYTES; i = i + 1) begin
-            mem[i] = 8'h00;
-        end
+        $readmemh("C:/Users/Sufiyan Sadiq/Desktop/work/cache/RV64/C/firmware_rebased.hex",tb.rv_soc.ram_slave.ram_memory.mem);
     end
-    // synthesis translate_on
 
 endmodule

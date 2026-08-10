@@ -79,7 +79,7 @@ module axi_cache_requester (
 				else 			 	r_next_state = AR;
 			end
 			R: begin
-				if(axi_if.RVALID && axi_if.RLAST) 	r_next_state = RIDLE;
+				if(axi_if.WLAST) 					r_next_state = RIDLE;
 				else 								r_next_state = R;
 			end
 		endcase	
@@ -93,6 +93,7 @@ module axi_cache_requester (
 	assign axi_if.ARSIZE 	= 3'b010; // 8 bytes per transfer please
 	assign axi_if.ARBURST	= '0;  // fixed line bursts
 	assign axi_if.ARLEN 	= 8'b0100;
+	assign axi_if.RVALID 	= (r_current_state == R);
         // output ARSIZE,
         // output ARBURST,
         // output ARCACHE,

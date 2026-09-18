@@ -53,7 +53,7 @@ module cache_controller (
 	------------------------------------------------------------------------------*/
 	always_comb begin
 	    if(cache_state == SEARCH_CACHE) o_read_valid = 1'b1;
-	    else 							 o_read_valid = 1'b0;
+	    else 							o_read_valid = 1'b0;
 	end
 
 	// stalling the PC to give cache enough time to process address
@@ -99,10 +99,14 @@ module cache_controller (
 	            else 					cache_state_nxt = FETCH 		;
 	        end
 	        WRITE_TO_CACHE: begin
-	            if(cache_write_done) 	cache_state_nxt = IDLE 			;
+	            // SRAM is single-port: drop write for a cycle before the refill lookup
+	            if(cache_write_done) 	cache_state_nxt = CACHE_OUTPUT	;
 	            else 					cache_state_nxt = WRITE_TO_CACHE;
 	        end
-	        // CACHE_OUTPUT: not wired in yet — will insert between WRITE_TO_CACHE and IDLE later
+	        CACHE_OUTPUT: begin
+	            // write_en is still registered high this cycle; next cycle SEARCH can read
+	            cache_state_nxt = SEARCH_CACHE;
+	        end
 	        default: cache_state_nxt = IDLE;
 	    endcase
 	end

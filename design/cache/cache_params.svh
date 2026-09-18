@@ -5,8 +5,8 @@
 localparam DWIDTH = 512;
 localparam ADDR_WIDTH=32;
 localparam DEPTH  = 16;
-
 // CACHE paramaters
+localparam INSTR_WIDTH = 32;
 localparam NUM_WAYS=4;
 localparam BYTE_OFF_WIDTH = $clog2(DWIDTH/8);
 localparam LINE_NUMBER_WIDTH=$clog2(DEPTH);

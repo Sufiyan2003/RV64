@@ -14,7 +14,7 @@ module cache_top (
 	input 					i_req_valid ,
 	input 					i_read 		,
 	input [DWIDTH-1:0]  	i_data		,
-	output [DWIDTH-1:0] 	o_data 		,
+	output logic [INSTR_WIDTH-1:0] o_data,
 	output 	logic			o_hit 		,
 	output logic 			o_write_done ,
 	output 	logic			o_miss
@@ -156,6 +156,16 @@ module cache_top (
 
 	assign o_miss = lookup_valid && !o_hit;
 
+	// hold the byte offset with the SRAM lookup so it still matches when hit is seen
+	logic [BYTE_OFF_WIDTH-1:0] byte_offset_q;
+
+	always_ff @(posedge clk or negedge resetn) begin
+	    if(!resetn)
+	        byte_offset_q <= '0;
+	    else if(i_read)
+	        byte_offset_q <= byte_offset;
+	end
+
 	/*------------------------------------------------------------------------------
 	--  						Detecting Hit or miss
 	------------------------------------------------------------------------------*/
@@ -170,6 +180,16 @@ module cache_top (
 				end
 			end
 		end
+	end
+
+	/*------------------------------------------------------------------------------
+	--  Drive the 32-bit instruction from the hit-way line
+	------------------------------------------------------------------------------*/
+	always_comb begin
+		o_data = '0;
+		if(o_hit)
+			// 4-byte-align the offset, then convert byte index to bit index
+			o_data = line_data[target_way][{byte_offset_q[BYTE_OFF_WIDTH-1:2], 5'b0} +: INSTR_WIDTH];
 	end
 
 

@@ -24,7 +24,7 @@ module axi_cache_requester (
 		AW 		,	// driving AW channel, waiting for master_if.awready
 		W 		,	// driving W channel, waitin for master_if.wready
 		B 			// one cycle pulse back to the cache
-	} state_t;
+	} state_t;		
 	
 	typedef enum logic [2:0] {
 		RIDLE ,

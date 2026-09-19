@@ -5,8 +5,12 @@
 -- TODO: must have an axi interface to communicate with the L2 cache
 ------------------------------------------------------------------------------*/
 
+`include "riscv_typedefs.svh"
 `include "cache_params.svh"
-module RV64_core (
+
+module RV64_core #(
+	parameter XLEN = 32
+)(
 	input clk 				,
 	input resetn 			,
 	axi4_intf.master axi_if
@@ -27,8 +31,10 @@ module RV64_core (
 	logic 					cache_write			;
 	logic 					cache_write_done 	;
 	logic [DWIDTH-1:0] 		cache_line_in 		;
-
-
+	logic [31:0] 			o_instruction 		;
+	control_signals_t 		exec_control_sigs 	;
+	logic [XLEN-1:0]        immediate 			;
+	logic [3:0] 			ALUCtrl;
 
 	/*------------------------------------------------------------------------------
 	--  						Instruction Fetch
@@ -49,51 +55,111 @@ module RV64_core (
 	/*------------------------------------------------------------------------------
 	--  					Cache to store instructions
 	------------------------------------------------------------------------------*/
-	// TODO: make all cache controllers and memory wrappers into one top level cache
-	cache_controller Icache_controller 	(
-		.clk         		(clk)				,
-		.resetn      		(resetn)			,
-		.i_pc        		(instr_addr)		,
-		.o_read_valid		(o_read_valid)		,
-		.o_instr_addr		(o_instr_addr)		,
-		.o_stall_pc  		(o_stall_pc)		,
-		.i_cache_hit 		(i_cache_hit) 		,
-		.i_cache_miss   	(i_cache_miss) 		,
-		.o_axi_req_valid	(o_axi_req_valid) 	,
-		.o_axi_req_addr 	(o_axi_req_addr) 	,
-		.i_axi_rsp_ready	(i_axi_rsp_ready) 	,
-		.i_axi_rsp_line 	(i_axi_rsp_line)    ,  // this line should be given to Icache
-		.o_write        	(cache_write)       ,
-		.cache_write_done	(cache_write_done)  ,
-		.o_cache_line    	(cache_line_in) 	,
-		.i_req_valid     	(address_valid)
-	);
-
-
-	cache_top Icache (
-		.clk        		(clk)				,
-		.resetn     		(resetn)			,
-		.i_data     		(cache_line_in)		, // right here
-		.i_address  		(o_instr_addr)		,
-		.i_write    		(cache_write)		, // this write should come from the controller when fetch cycle has finished
-		.i_req_valid		(1'b1) 				, // is the instruction address valid
-		.i_read     		(o_read_valid)		, // read will come whenever its a valid req address
-		.o_data     		() 					, // the data to be transmitted out
-		.o_hit      		(i_cache_hit) 		, // to relay hit to controller
-		.o_write_done		(cache_write_done),
-		.o_miss     		(i_cache_miss) 		  // to relay miss to controller
+	IF_stage fetch_stage(
+		.clk 					(clk)				,
+		.resetn					(resetn)			,
+		.i_PC					(instr_addr)		,
+		.o_stall_pc				(o_stall_pc)		,
+		.o_axi_req_valid		(o_axi_req_valid)	,
+		.o_axi_req_addr			(o_axi_req_addr)	,
+		.i_axi_rsp_ready		(i_axi_rsp_ready)	,
+		.i_axi_rsp_line			(i_axi_rsp_line)	,
+		.address_valid			(address_valid)		,
+		.o_instruction 			(o_instruction)
 	);
 
 	/*------------------------------------------------------------------------------
-	--  	TODO: An AXI-4 wrapper to take beats and form a complete line
+	--  	An AXI-4 wrapper to take beats and form a complete line
 	------------------------------------------------------------------------------*/
 	axi_cache_requester axi_icache_master(
-		.clk        (clk),
-		.resetn     (resetn),
-		.i_axi_addr (o_instr_addr),
-		.i_axi_fetch(o_axi_req_valid),
-		.i_axi_evict(),
-		.axi_if     (axi_if)
+		.clk        	(clk)					,
+		.resetn     	(resetn)				,
+		.i_axi_addr 	(o_axi_req_addr)			,
+		.i_axi_fetch	(o_axi_req_valid)		,
+		.i_axi_evict	(1'b0)					,
+		.o_line     	(i_axi_rsp_line)		,
+		.o_line_valid	(i_axi_rsp_ready)		,
+		.axi_if     	(axi_if)
 	);
+
+	/*------------------------------------------------------------------------------
+	--  					Instruction Decode Step
+	------------------------------------------------------------------------------*/
+
+	instr_decode instr_dec
+	(
+		.i_instr		(o_instruction)	 		,
+		.o_ctrl			(exec_control_sigs)
+	);
+
+
+	ALU_Control alu_ctrl(
+		.ALUOp			(exec_control_sigs.ALUOp)				,
+		.func3			(o_instruction[25])						,
+		.func7_0		(o_instruction[30])						,
+		.func7_5		(o_instruction[14:12])					,
+		.ALUCtrl		(ALUCtrl)
+
+	);
+
+	ImmGen imm_generator(
+		.instruction	(o_instruction) 						,
+		.ImmSel 		(exec_control_sigs.ImmSel)				,
+		.Imm			(immediate)
+	);
+
+
+
+	/*------------------------------------------------------------------------------
+	--  						Execute Step
+	------------------------------------------------------------------------------*/
+	register_file #(
+		.DEPTH(32),
+		.XLEN (XLEN)	
+	) RegFile(
+		.clk				(clk)								,
+		.resetn				(resetn)							,
+		.wr_en				(exec_control_sigs.RegWEn)			,
+		.rd_en				(1'b1)								,
+		.i_rs1				(o_instruction[19:15])				,
+		.i_rs2				(o_instruction[24:20])				,
+		.i_rd				(o_instruction[11:7])				, // need to reroute the destination register back somehow
+		.i_wr_data			(exec_control_sigs.MemWrite)		,
+		.o_rs1				(rd1)								,
+		.o_rs2				(rd2)
+	
+	);
+
+	//A mux
+	mux_2_to_1 #(
+		.XLEN(XLEN)
+	) AMux(
+		.x			(rd1)										,
+		.y			(instr_addr)								,
+		.select		(exec_control_sigs.ASel)					,
+		.out		(AMuxOut)
+	);
+	
+	//B mux
+	mux_2_to_1 #(
+		.XLEN(XLEN)
+	) BMux(
+		.x			(rd2)										,
+		.y			(immediate)									,
+		.select		(exec_control_sigs.ALUSrc)					,
+		.out		(muxOut)
+	);
+
+	ALU #(
+		.XLEN(32)
+	) alu_p (
+		.in1(),
+		.in2(),
+		.ALUCtrl()
+	);
+
+
+
+
 
 endmodule : RV64_core

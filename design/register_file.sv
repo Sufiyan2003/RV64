@@ -1,8 +1,8 @@
 /*------------------------------------------------------------------------------
 -- Author: Muhammad Sufiyan Sadiq 
 -- Date: 07_08_2026
--- Description: This is the register file we will be using 
--- 
+-- Description: This is the register file we will be using, the register 0
+-- is hardwired to 0
 ------------------------------------------------------------------------------*/
 
 module register_file #(
@@ -31,7 +31,8 @@ module register_file #(
 			end
 		end else begin
 			if(wr_en) begin
-				reg_array[i_rd] <= i_wr_data;
+				if(i_rd == 0) 	reg_array[0] 	<= '0;
+				else 			reg_array[i_rd] <= i_wr_data;
 			end
 			else begin
 				reg_array[i_rd] <= reg_array[i_rd];

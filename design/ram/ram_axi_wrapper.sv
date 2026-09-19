@@ -1,126 +1,95 @@
 /*------------------------------------------------------------------------------
--- Author: Muhammad Sufiyan Sadiq 
+-- Author: Muhammad Sufiyan Sadiq
 -- Date: 08_08_2026
--- Description: This will take the slave input from the interconnect and then
--- will get response from the ram
+-- Description: AXI4 read slave wrapper around the 64-bit RAM. Turns an INCR
+--              burst into sequential RAM reads and returns one beat per handshake.
 ------------------------------------------------------------------------------*/
 `include "cache_params.svh"
 module ram_axi_wrapper (
-	input 						clk,    // Clock
+	input 						clk,
 	input 						resetn,
 	axi4_intf.slave 			axi_if,
 	output [15:0] 				o_ram_off,
 	output logic				re,
-	output [DWIDTH/8 - 1: 0]	byte_en,
-	output 						we 		,
+	output [7:0]				byte_en,
+	output 						we,
 	input 						ram_ready,
 	input [63:0]				read_data
 );
 
-
-	// define states to receive read requests
-	typedef enum logic [2:0] {
+	typedef enum logic [1:0] {
 		RIDLE,
-		AR,
-		R
+		RD_ISSUE,
+		RD_DATA
 	} e_read_state;
 
-
 	e_read_state r_current_state, r_next_state;
-	logic incoming_rd_req;
-	logic fulfilling_rd_req;
 
-	logic [9:0] tr_len;
-	logic [7:0] num_bytes;
-	logic [15:0] addr;
-	/*------------------------------------------------------------------------------
-	--  						State transition
-	------------------------------------------------------------------------------*/
+	logic [15:0] beat_addr;
+	logic [7:0]  beats_left;	// remaining beats after the one in flight
+	logic        last_q;
+
 	always_ff @(posedge clk or negedge resetn) begin
-		if(!resetn) r_current_state <= RIDLE;
-		else 		r_current_state <= r_next_state;
+		if (!resetn) r_current_state <= RIDLE;
+		else         r_current_state <= r_next_state;
 	end
 
 	always_comb begin
 		r_next_state = r_current_state;
 		case (r_current_state)
 			RIDLE: begin
-				if(axi_if.ARVALID) 		r_next_state = AR 		;
-				else  			   		r_next_state = RIDLE	;
+				if (axi_if.ARVALID && ram_ready)
+					r_next_state = RD_ISSUE;
 			end
-			AR: begin
-				if(!incoming_rd_req) 	r_next_state = R		;
-				else 					r_next_state = AR		;
+			RD_ISSUE: begin
+				r_next_state = RD_DATA;
 			end
-			R: begin
-				if(axi_if.WLAST) 		r_next_state = RIDLE	;
-				else 					r_next_state = R		;
+			RD_DATA: begin
+				if (axi_if.RREADY) begin
+					if (last_q) r_next_state = RIDLE;
+					else        r_next_state = RD_ISSUE;
+				end
 			end
-
+			default: r_next_state = RIDLE;
 		endcase
 	end
 
-
 	always_ff @(posedge clk or negedge resetn) begin
-		if(~resetn) begin
-			incoming_rd_req <= 0;
-			addr <= '0;
+		if (~resetn) begin
+			beat_addr  <= '0;
+			beats_left <= '0;
+			last_q     <= 1'b0;
 		end else begin
-			if(axi_if.AREADY && axi_if.ARVALID) begin 
-				incoming_rd_req <= 1'b1;
-				fulfilling_rd_req <= 1'b1;
-				addr <= axi_if.ARADDR[15:0];
-			end
-			else if(axi_if.RLAST) begin
-				fulfilling_rd_req <= '0;
-			end
-			else begin 
-				incoming_rd_req <= 1'b0;
-				fulfilling_rd_req <= fulfilling_rd_req;
-				addr <= addr;
+			if (r_current_state == RIDLE && axi_if.ARVALID && ram_ready) begin
+				beat_addr  <= axi_if.ARADDR[15:0];
+				beats_left <= axi_if.ARLEN;	// remaining after first beat
+				last_q     <= (axi_if.ARLEN == 8'd0);
+			end else if (r_current_state == RD_DATA && axi_if.RREADY && !last_q) begin
+				beat_addr  <= beat_addr + 16'd8;
+				beats_left <= beats_left - 8'd1;
+				last_q     <= (beats_left == 8'd1);
 			end
 		end
 	end
 
-	// store the number of transactions we need to send
-	always_comb begin
-		tr_len = '0;
-		case (axi_if.ARLEN)
-			8'd0: tr_len = 1;
-			8'd1: tr_len = 2;
-			8'd2: tr_len = 4;
-			8'd3: tr_len = 8;
-			8'd4: tr_len = 16;
-			default tr_len = 16;
-		endcase
-	end
+	assign re        = (r_current_state == RD_ISSUE);
+	assign o_ram_off = beat_addr;
+	assign we        = 1'b0;
+	assign byte_en   = 8'h00;
 
+	assign axi_if.AREADY = (r_current_state == RIDLE) && ram_ready;
+	assign axi_if.RVALID = (r_current_state == RD_DATA);
+	assign axi_if.RDATA  = read_data;
+	assign axi_if.RLAST  = last_q;
+	assign axi_if.RRESP  = 2'b00;
+	assign axi_if.RID    = '0;
+	assign axi_if.RUSER  = '0;
 
-	always_comb begin
-		re = (r_current_state ==R) && (num_bytes < tr_len);
-	end
+	assign axi_if.AWREADY = 1'b0;
+	assign axi_if.WREADY  = 1'b0;
+	assign axi_if.BVALID  = 1'b0;
+	assign axi_if.BRESP   = '0;
+	assign axi_if.BID     = '0;
+	assign axi_if.BUSER   = '0;
 
-
-	// COUNTER TO READ FROM RAM
-	always_ff @(posedge clk or negedge resetn) begin
-		if(~resetn) begin
-			num_bytes <= '0;
-		end else begin
-			if(re) num_bytes <= num_bytes + 1;
-			else if(r_current_state != R) num_bytes <= '0;
-			else num_bytes <= num_bytes;
-		end
-	end
-
-
-
-	assign axi_if.AREADY 	= ram_ready;
-	assign axi_if.RREADY    = (r_current_state == R);
-	assign o_ram_off 		= addr + num_bytes;
-	assign axi_if.WLAST 	= (num_bytes == tr_len);
-	assign axi_if.WSTRB 	= '1; // keep this strobe as always 1
-	assign axi_if.WDATA 	= read_data;
-	assign axi_if.WUSER     = '0;  // dont really care about this for now
-
-	assign we = '0;
 endmodule : ram_axi_wrapper

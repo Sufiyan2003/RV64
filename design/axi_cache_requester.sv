@@ -1,109 +1,136 @@
 /*------------------------------------------------------------------------------
--- Author: Muhammad Sufiyan Sadiq 
+-- Author: Muhammad Sufiyan Sadiq
 -- Date: 08_08_2026
--- Description: This is to send the axi request to get a line from RAM
+-- Description: AXI4 read master. Issues a line-sized INCR burst and packs
+--              64-bit beats into a 512-bit cache line for the I-cache fill.
 ------------------------------------------------------------------------------*/
 
 `include "cache_params.svh"
 module axi_cache_requester (
-	input clk 							,    // Clock
-	input resetn 						,
-	input [ADDR_WIDTH-1:0] i_axi_addr 	,
-	input 				   i_axi_fetch  ,
-	input 				   i_axi_evict 	,
-	axi4_intf.master       axi_if
-	
+	input 						clk 			,
+	input 						resetn 			,
+	input [ADDR_WIDTH-1:0] 		i_axi_addr 		,
+	input 				   		i_axi_fetch  	,
+	input 				   		i_axi_evict 	,
+	output logic [DWIDTH-1:0]	o_line 			,
+	output logic 				o_line_valid 	,
+	axi4_intf.master       		axi_if
 );
 
+	localparam int AXI_BEAT_W  = 64;
+	localparam int NUM_BEATS   = DWIDTH / AXI_BEAT_W; // 8
+	localparam int BEAT_IDX_W  = $clog2(NUM_BEATS);
 
-	/*------------------------------------------------------------------------------
-	--  							state machine
-	------------------------------------------------------------------------------*/
-	typedef enum logic [2:0] {
-		IDLE	,	// waiting for eviction request
-		AW 		,	// driving AW channel, waiting for master_if.awready
-		W 		,	// driving W channel, waitin for master_if.wready
-		B 			// one cycle pulse back to the cache
-	} state_t;		
-	
-	typedef enum logic [2:0] {
+	typedef enum logic [1:0] {
 		RIDLE ,
 		AR 	  ,
-		R 	  
+		R
 	} read_state_t;
 
-	state_t w_current_state, w_next_state;
 	read_state_t r_current_state, r_next_state;
 
+	logic [ADDR_WIDTH-1:0] 		araddr_q;
+	logic [BEAT_IDX_W-1:0] 		beat_cnt;
+	logic [DWIDTH-1:0] 			line_acc;
+	logic [DWIDTH-1:0] 			line_nxt;
+	logic 						beat_fire;
+	logic 						last_beat;
 
-	/*------------------------------------------------------------------------------
-	--  					Managing state transition
-	------------------------------------------------------------------------------*/
-	always_ff @(posedge clk or negedge resetn) begin
-		if(~resetn) w_current_state <= IDLE;
-		else		w_current_state <= w_next_state;
+	assign beat_fire = (r_current_state == R) && axi_if.RVALID && axi_if.RREADY;
+	assign last_beat = beat_fire && axi_if.RLAST;
+
+	always_comb begin
+		line_nxt = line_acc;
+		if (beat_fire)
+			line_nxt[beat_cnt*AXI_BEAT_W +: AXI_BEAT_W] = axi_if.RDATA;
 	end
 
-	// always_comb begin
-	// 	w_next_state = w_current_state;
-	// 	case (w_current_state)
-	// 		IDLE: begin
-	// 			if(i_axi_evict) w_next_state =AW;
-	// 			else 			w_next_state = IDLE;
-	// 		end
-	// 		AW: begin
-	// 		end
-	// 		W:
-	// 		B:	
-	// 	endcase	
-	// end
-
-
-
-
 	always_ff @(posedge clk or negedge resetn) begin
-		if(~resetn) r_current_state <= RIDLE;
-		else 		r_current_state <= r_next_state;
+		if (~resetn)
+			r_current_state <= RIDLE;
+		else
+			r_current_state <= r_next_state;
 	end
-
 
 	always_comb begin
 		r_next_state = r_current_state;
 		case (r_current_state)
 			RIDLE: begin
-				if(i_axi_fetch) r_next_state = AR;
-				else 			r_next_state = RIDLE;
-			end 
+				if (i_axi_fetch)	r_next_state = AR;
+				else				r_next_state = RIDLE;
+			end
 			AR: begin
-				if(axi_if.AREADY) 	r_next_state = R;
-				else 			 	r_next_state = AR;
+				if (axi_if.AREADY)	r_next_state = R;
+				else				r_next_state = AR;
 			end
 			R: begin
-				if(axi_if.WLAST) 					r_next_state = RIDLE;
-				else 								r_next_state = R;
+				if (last_beat)		r_next_state = RIDLE;
+				else				r_next_state = R;
 			end
-		endcase	
+			default: r_next_state = RIDLE;
+		endcase
 	end
 
+	always_ff @(posedge clk or negedge resetn) begin
+		if (~resetn) begin
+			araddr_q     <= '0;
+			beat_cnt     <= '0;
+			line_acc     <= '0;
+			o_line       <= '0;
+			o_line_valid <= 1'b0;
+		end else begin
+			o_line_valid <= 1'b0;
 
+			if (r_current_state == RIDLE && i_axi_fetch) begin
+				araddr_q <= {i_axi_addr[ADDR_WIDTH-1:BYTE_OFF_WIDTH], {BYTE_OFF_WIDTH{1'b0}}};
+				beat_cnt <= '0;
+				line_acc <= '0;
+			end
 
+			if (beat_fire) begin
+				line_acc <= line_nxt;
+				beat_cnt <= beat_cnt + 1'b1;
+			end
+
+			if (last_beat) begin
+				o_line       <= line_nxt;
+				o_line_valid <= 1'b1;
+			end
+		end
+	end
 
 	assign axi_if.ARVALID 	= (r_current_state == AR);
-	assign axi_if.ARADDR 	= (r_current_state == AR && i_axi_fetch) ? i_axi_addr : '0;
-	assign axi_if.ARSIZE 	= 3'b010; // 8 bytes per transfer please
-	assign axi_if.ARBURST	= '0;  // fixed line bursts
-	assign axi_if.ARLEN 	= 8'b0100;
-	assign axi_if.RVALID 	= (r_current_state == R);
-        // output ARSIZE,
-        // output ARBURST,
-        // output ARCACHE,
-        // output ARPROT,
-        // output ARID,
-        // output ARLEN,
-        // output ARLOCK,
-        // output ARREGION,
-        // output ARUSER,
+	assign axi_if.ARADDR  	= araddr_q;
+	assign axi_if.ARSIZE  	= 3'b011;		// 8 bytes / beat
+	assign axi_if.ARBURST 	= 2'b01;		// INCR
+	assign axi_if.ARLEN   	= 8'(NUM_BEATS - 1); // 8 beats -> ARLEN=7
+	assign axi_if.ARID    	= '0;
+	assign axi_if.ARLOCK  	= 1'b0;
+	assign axi_if.ARCACHE 	= '0;
+	assign axi_if.ARPROT  	= '0;
+	assign axi_if.ARREGION	= '0;
+	assign axi_if.ARUSER  	= '0;
 
+	assign axi_if.RREADY  	= (r_current_state == R);
 
+	assign axi_if.AWVALID 	= 1'b0;
+	assign axi_if.AWADDR  	= '0;
+	assign axi_if.AWSIZE  	= '0;
+	assign axi_if.AWBURST 	= '0;
+	assign axi_if.AWCACHE 	= '0;
+	assign axi_if.AWPROT  	= '0;
+	assign axi_if.AWID    	= '0;
+	assign axi_if.AWLEN   	= '0;
+	assign axi_if.AWLOCK  	= 1'b0;
+	assign axi_if.AWQOS   	= '0;
+	assign axi_if.AWREGION	= '0;
+	assign axi_if.AWUSER  	= '0;
+
+	assign axi_if.WVALID  	= 1'b0;
+	assign axi_if.WLAST   	= 1'b0;
+	assign axi_if.WDATA   	= '0;
+	assign axi_if.WSTRB   	= '0;
+	assign axi_if.WUSER   	= '0;
+	assign axi_if.BREADY  	= 1'b0;
 
 endmodule : axi_cache_requester

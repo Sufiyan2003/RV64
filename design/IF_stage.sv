@@ -18,16 +18,17 @@ module IF_stage
     input                   i_axi_rsp_ready     ,
     input [DWIDTH-1:0]      i_axi_rsp_line      ,
     input                   address_valid       ,
-    output [31:0]           o_instruction
+    output [31:0]           o_instruction 		,
+	output [ADDR_WIDTH-1:0] o_instr_addr		,
+	output 					o_instr_valid
 );
 
-    logic                   o_read_valid;
-    logic [ADDR_WIDTH-1:0]  o_instr_addr;
-    logic                   i_cache_hit;
-    logic                   i_cache_miss;
-    logic                   cache_write;
-    logic                   cache_write_done;
-    logic [DWIDTH-1:0]      cache_line_in;
+    logic                   o_read_valid		;
+    logic                   i_cache_hit			;
+    logic                   i_cache_miss		;
+    logic                   cache_write			;
+    logic                   cache_write_done	;
+    logic [DWIDTH-1:0]      cache_line_in		;
 
 	cache_controller Icache_controller 	(
 		.clk         		(clk)				,
@@ -57,12 +58,11 @@ module IF_stage
 		.i_req_valid		(1'b1) 				, // is the instruction address valid
 		.i_read     		(o_read_valid)		, // read will come whenever its a valid req address
 		.o_data     		(o_instruction) 	, // the data to be transmitted out
+		.o_data_valid 		(o_instr_valid) 	,
 		.o_hit      		(i_cache_hit) 		, // to relay hit to controller
-		.o_write_done		(cache_write_done),
+		.o_write_done		(cache_write_done)	,
 		.o_miss     		(i_cache_miss) 		  // to relay miss to controller
 	);
 
 
 endmodule
-
-

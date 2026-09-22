@@ -14,13 +14,6 @@ module instr_decode (
 );
 
     logic [6:0] opcode;
-    logic [4:0] rd;
-    logic [2:0] func3;
-    logic [4:0] rs1;
-    logic [4:0] rs2;
-    logic [6:0] func7;
-    logic [11:0] imm;
-    logic [11:0] shamt;
 
 
     assign opcode = i_instr[6:0];
@@ -120,7 +113,7 @@ module instr_decode (
                 o_ctrl.MemWrite = 0;
                 o_ctrl.ALUSrc = 1;
                 o_ctrl.ImmSel = 3'b011;
-                o_ctrl.ASel = 0;
+                o_ctrl.ASel = 1;
                 o_ctrl.Jump  = 0;
             end
             B_TYPE: begin

@@ -34,7 +34,13 @@ module RV64_core #(
 	logic [31:0] 			o_instruction 		;
 	control_signals_t 		exec_control_sigs 	;
 	logic [XLEN-1:0]        immediate 			;
-	logic [3:0] 			ALUCtrl;
+	logic [3:0] 			ALUCtrl				;
+	logic [XLEN - 1: 0]     BMuxOut 			;
+	logic [XLEN - 1: 0] 	AMuxOut 			;
+	logic [XLEN - 1: 0]     alu_out 			; 
+	logic [XLEN - 1: 0] 	rd1, rd2 			;
+	logic [ADDR_WIDTH-1:0]	if_instr_addr 		;
+	logic 					if_instr_valid 		;
 
 	/*------------------------------------------------------------------------------
 	--  						Instruction Fetch
@@ -65,7 +71,9 @@ module RV64_core #(
 		.i_axi_rsp_ready		(i_axi_rsp_ready)	,
 		.i_axi_rsp_line			(i_axi_rsp_line)	,
 		.address_valid			(address_valid)		,
-		.o_instruction 			(o_instruction)
+		.o_instruction 			(o_instruction) 	,
+		.o_instr_addr 			(if_instr_addr)		,
+		.o_instr_valid 			(if_instr_valid)
 	);
 
 	/*------------------------------------------------------------------------------
@@ -110,9 +118,6 @@ module RV64_core #(
 
 
 
-	/*------------------------------------------------------------------------------
-	--  						Execute Step
-	------------------------------------------------------------------------------*/
 	register_file #(
 		.DEPTH(32),
 		.XLEN (XLEN)	
@@ -130,36 +135,23 @@ module RV64_core #(
 	
 	);
 
-	//A mux
-	mux_2_to_1 #(
+	/*------------------------------------------------------------------------------
+	--  						Execute Step
+	------------------------------------------------------------------------------*/
+
+	EX_stage #(
 		.XLEN(XLEN)
-	) AMux(
-		.x			(rd1)										,
-		.y			(instr_addr)								,
-		.select		(exec_control_sigs.ASel)					,
-		.out		(AMuxOut)
+	) execution_stage(
+	 .clk                 	(clk),
+     .resetn              	(resetn),
+     .rd1                 	(rd1),
+     .rd2                 	(rd2),
+     .immediate           	(immediate),
+     .if_instr_addr 		(if_instr_addr),
+     .exec_control_sigs   	(exec_control_sigs),
+     .ALUCtrl				(ALUCtrl),
+     .o_alu_result			(alu_out)
 	);
-	
-	//B mux
-	mux_2_to_1 #(
-		.XLEN(XLEN)
-	) BMux(
-		.x			(rd2)										,
-		.y			(immediate)									,
-		.select		(exec_control_sigs.ALUSrc)					,
-		.out		(muxOut)
-	);
-
-	ALU #(
-		.XLEN(32)
-	) alu_p (
-		.in1(),
-		.in2(),
-		.ALUCtrl()
-	);
-
-
-
 
 
 endmodule : RV64_core

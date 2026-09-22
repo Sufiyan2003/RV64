@@ -15,6 +15,7 @@ module cache_top (
 	input 					i_read 		,
 	input [DWIDTH-1:0]  	i_data		,
 	output logic [INSTR_WIDTH-1:0] o_data,
+	output logic 			o_data_valid,
 	output 	logic			o_hit 		,
 	output logic 			o_write_done ,
 	output 	logic			o_miss
@@ -186,10 +187,13 @@ module cache_top (
 	--  Drive the 32-bit instruction from the hit-way line
 	------------------------------------------------------------------------------*/
 	always_comb begin
-		o_data = '0;
-		if(o_hit)
+		o_data 			= '0;
+		o_data_valid 	= '0;
+		if(o_hit) begin
 			// 4-byte-align the offset, then convert byte index to bit index
 			o_data = line_data[target_way][{byte_offset_q[BYTE_OFF_WIDTH-1:2], 5'b0} +: INSTR_WIDTH];
+			o_data_valid = 1'b1;
+		end
 	end
 
 

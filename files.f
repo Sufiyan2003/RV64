@@ -34,7 +34,7 @@
 ./design/ProgramCounter.sv
 ./design/ram.sv
 ./design/axi_cache_requester.sv
-./design/IF_stage.sv
+
 
 // ID files
 ./design/register_file.sv
@@ -43,6 +43,10 @@
 ./design/core/ALU.sv
 ./design/core/ImmGen.sv
 ./design/core/instr_decode.sv
+
+./design/IF_stage.sv
+./design/core/ID_stage.sv
+./design/core/EX_stage.sv
 
 ./design/RV64_core.sv
 ./design/RV64_soc.sv

@@ -21,26 +21,23 @@ module RV64_core #(
 	logic 					o_read_valid 		;
 	logic 					address_valid 		;
 	logic 					o_stall_pc 			;
-	logic 					i_cache_hit 		;
-	logic 					i_cache_miss 		;
 	logic 					o_axi_req_valid 	;
 	logic [ADDR_WIDTH-1:0] 	o_axi_req_addr 		; 
 	logic 					i_axi_rsp_ready 	;
 	logic [DWIDTH-1:0] 		i_axi_rsp_line 		;
-	logic [ADDR_WIDTH-1:0]	o_instr_addr 		;
-	logic 					cache_write			;
-	logic 					cache_write_done 	;
-	logic [DWIDTH-1:0] 		cache_line_in 		;
 	logic [31:0] 			o_instruction 		;
 	control_signals_t 		exec_control_sigs 	;
 	logic [XLEN-1:0]        immediate 			;
-	logic [3:0] 			ALUCtrl				;
-	logic [XLEN - 1: 0]     BMuxOut 			;
-	logic [XLEN - 1: 0] 	AMuxOut 			;
 	logic [XLEN - 1: 0]     alu_out 			; 
 	logic [XLEN - 1: 0] 	rd1, rd2 			;
 	logic [ADDR_WIDTH-1:0]	if_instr_addr 		;
 	logic 					if_instr_valid 		;
+	logic 		WB			;
+	logic 		MemRd		;
+	logic [2:0] ALUOp		;
+	logic 		ALUSrc		;
+	logic 		ASel		;
+
 
 	/*------------------------------------------------------------------------------
 	--  						Instruction Fetch
@@ -94,46 +91,23 @@ module RV64_core #(
 	--  					Instruction Decode Step
 	------------------------------------------------------------------------------*/
 
-	instr_decode instr_dec
-	(
-		.i_instr		(o_instruction)	 		,
-		.o_ctrl			(exec_control_sigs)
+	ID_stage #(
+		.XLEN(XLEN)
+	) decode_stage(
+		.clk             	(clk)				,
+		.resetn          	(resetn)			,
+		.i_instruction   	(o_instruction)		,
+		.o_write_back    	(WB)				,
+		.o_mem_read      	(MemRd)				,
+		.o_ALUOp         	(ALUOp)				,
+		.o_ALUSrc        	(ALUSrc)			,
+		.o_ASel 			(ASel) 				,
+		.rd1           		(rd1)				,
+		.rd2           		(rd2)				,
+		.o_immediate   		(immediate)
 	);
 
 
-	ALU_Control alu_ctrl(
-		.ALUOp			(exec_control_sigs.ALUOp)				,
-		.func3			(o_instruction[25])						,
-		.func7_0		(o_instruction[30])						,
-		.func7_5		(o_instruction[14:12])					,
-		.ALUCtrl		(ALUCtrl)
-
-	);
-
-	ImmGen imm_generator(
-		.instruction	(o_instruction) 						,
-		.ImmSel 		(exec_control_sigs.ImmSel)				,
-		.Imm			(immediate)
-	);
-
-
-
-	register_file #(
-		.DEPTH(32),
-		.XLEN (XLEN)	
-	) RegFile(
-		.clk				(clk)								,
-		.resetn				(resetn)							,
-		.wr_en				(exec_control_sigs.RegWEn)			,
-		.rd_en				(1'b1)								,
-		.i_rs1				(o_instruction[19:15])				,
-		.i_rs2				(o_instruction[24:20])				,
-		.i_rd				(o_instruction[11:7])				, // need to reroute the destination register back somehow
-		.i_wr_data			(exec_control_sigs.MemWrite)		,
-		.o_rs1				(rd1)								,
-		.o_rs2				(rd2)
-	
-	);
 
 	/*------------------------------------------------------------------------------
 	--  						Execute Step
@@ -142,15 +116,19 @@ module RV64_core #(
 	EX_stage #(
 		.XLEN(XLEN)
 	) execution_stage(
-	 .clk                 	(clk),
-     .resetn              	(resetn),
-     .rd1                 	(rd1),
-     .rd2                 	(rd2),
-     .immediate           	(immediate),
-     .if_instr_addr 		(if_instr_addr),
-     .exec_control_sigs   	(exec_control_sigs),
-     .ALUCtrl				(ALUCtrl),
-     .o_alu_result			(alu_out)
+		.clk                (clk)					,
+		.resetn             (resetn)				,
+		.rd1                (rd1)					,
+		.rd2                (rd2)					,
+		.immediate          (immediate)				,
+		.if_instr_addr 		(if_instr_addr)			,
+  		.i_ALUOp            (ALUOp)					,
+    	.i_ALUSrc           (ALUSrc)				,
+		.i_ASel 			(ASel) 					,
+    	.i_func3            (o_instruction[25])		,
+    	.i_func7_0          (o_instruction[30])		,
+    	.i_func7_5          (o_instruction[14:12])	,
+     	.o_alu_result		(alu_out)
 	);
 
 

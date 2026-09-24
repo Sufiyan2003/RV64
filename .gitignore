@@ -1,3 +1,5 @@
 work
 transcript
 *.wlf
+gpt2env
+scripts/gpt2_weights

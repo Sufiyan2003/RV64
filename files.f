@@ -47,6 +47,7 @@
 ./design/IF_stage.sv
 ./design/core/ID_stage.sv
 ./design/core/EX_stage.sv
+./design/MEM_stage.sv
 
 ./design/RV64_core.sv
 ./design/RV64_soc.sv

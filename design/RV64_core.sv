@@ -11,9 +11,10 @@
 module RV64_core #(
 	parameter XLEN = 32
 )(
-	input clk 				,
-	input resetn 			,
-	axi4_intf.master axi_if
+	input clk 						,
+	input resetn 					,
+	axi4_intf.master imem_axi_if 	,
+	axi4_intf.master dmem_axi_if
 );
 
 
@@ -32,11 +33,11 @@ module RV64_core #(
 	logic [XLEN - 1: 0] 	rd1, rd2 			;
 	logic [ADDR_WIDTH-1:0]	if_instr_addr 		;
 	logic 					if_instr_valid 		;
-	logic 		WB			;
-	logic 		MemRd		;
-	logic [2:0] ALUOp		;
-	logic 		ALUSrc		;
-	logic 		ASel		;
+	logic 					WB					;
+	logic 					MemRd				;
+	logic [2:0] 			ALUOp				;
+	logic 					ALUSrc				;
+	logic 					ASel				;
 
 
 	/*------------------------------------------------------------------------------
@@ -79,12 +80,12 @@ module RV64_core #(
 	axi_cache_requester axi_icache_master(
 		.clk        	(clk)					,
 		.resetn     	(resetn)				,
-		.i_axi_addr 	(o_axi_req_addr)			,
+		.i_axi_addr 	(o_axi_req_addr)		,
 		.i_axi_fetch	(o_axi_req_valid)		,
 		.i_axi_evict	(1'b0)					,
 		.o_line     	(i_axi_rsp_line)		,
 		.o_line_valid	(i_axi_rsp_ready)		,
-		.axi_if     	(axi_if)
+		.axi_if     	(imem_axi_if)
 	);
 
 	/*------------------------------------------------------------------------------
@@ -130,6 +131,58 @@ module RV64_core #(
     	.i_func7_5          (o_instruction[14:12])	,
      	.o_alu_result		(alu_out)
 	);
+
+
+	logic mem_stall;
+	/*------------------------------------------------------------------------------
+	--  						Memory Step
+	------------------------------------------------------------------------------*/
+	MEM_stage #(
+		.XLEN(XLEN)
+	) memory_stage(
+		.clk                  (clk)						,
+		.resetn               (resetn)					,
+		.i_addr               (alu_out)					,
+		.o_stall              (mem_stall)				,
+		
+		// signals to handover the desired address to the axi master
+		.o_axi_req_valid      (dmem_axi_req_valid)		,
+		.o_axi_req_addr       (dmem_axi_req_addr)		,
+
+		// signals to tell the cache controller that the desired line is present in the cache
+		.i_axi_rsp_ready     (dmem_axi_rsp_rdy)			,
+		.i_axi_rsp_line      (dmem_axi_rsp_line)		,
+		.i_mem_rd            (MemRd)					,
+
+		// a valid memory read or write will come from the control unit
+		.o_data_value        (dmem_value)				,
+		.o_data_valid        (dmem_val_valid)						
+
+	);
+
+
+	/*------------------------------------------------------------------------------
+	--  		An AXI-4 master to request data lines from beyond
+	------------------------------------------------------------------------------*/
+	axi_cache_requester axi_dcache_master(
+		.clk        	(clk)					,
+		.resetn     	(resetn)				,
+		.i_axi_addr 	(dmem_axi_req_addr)		,
+		.i_axi_fetch	(dmem_axi_req_valid)	,
+		.i_axi_evict	(1'b0)					,
+		.o_line     	(dmem_axi_rsp_line)		,
+		.o_line_valid	(dmem_axi_rsp_rdy)		,
+		.axi_if     	(dmem_axi_if)
+	);
+
+
+
+
+	/*------------------------------------------------------------------------------
+	--  						Writeback Step
+	------------------------------------------------------------------------------*/
+
+
 
 
 endmodule : RV64_core

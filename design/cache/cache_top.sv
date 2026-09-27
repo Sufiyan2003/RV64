@@ -6,21 +6,28 @@
 ------------------------------------------------------------------------------*/
 
 `include "cache_params.svh"
-module cache_top (
-	input 					clk			,    // Clock
-	input 					resetn		,
-	input [ADDR_WIDTH-1:0] 	i_address	,
-	input 					i_write 	,
-	input 					i_req_valid ,
-	input 					i_read 		,
-	input [DWIDTH-1:0]  	i_data		,
-	output logic [INSTR_WIDTH-1:0] o_data,
-	output logic 			o_data_valid,
-	output 	logic			o_hit 		,
-	output logic 			o_write_done ,
+module cache_top #(
+	parameter CWIDTH=32,
+	parameter CADR_WIDTH=64
+) (
+	input 					clk				,    // Clock
+	input 					resetn			,
+	input [CADR_WIDTH-1:0] 	i_address		,
+	input 					i_write 		,
+	input 					i_req_valid 	,
+	input 					i_read 			,
+	input [DWIDTH-1:0]  	i_data			,
+	output logic [CWIDTH-1:0] o_data	,
+	output logic 			o_data_valid	,
+	output 	logic			o_hit 			,
+	output logic 			o_write_done 	,
 	output 	logic			o_miss
 	
 );
+
+	
+	parameter NUM_BLOCK = $clog2(INSTR_WIDTH);
+	parameter OFFSET    = $clog2(CWIDTH/8);
 
 	logic [NUM_WAYS-1:0] write_to_cache;
 
@@ -31,7 +38,7 @@ module cache_top (
 	// dissect the input address
 	assign byte_offset = i_address[BYTE_OFF_WIDTH-1:0];
 	assign line_number = i_address[BYTE_OFF_WIDTH + LINE_NUMBER_WIDTH-1:BYTE_OFF_WIDTH];
-	assign tag_value   = i_address[ADDR_WIDTH-1 : BYTE_OFF_WIDTH + LINE_NUMBER_WIDTH];
+	assign tag_value   = i_address[CADR_WIDTH-1 : BYTE_OFF_WIDTH + LINE_NUMBER_WIDTH];
 	
 
 	logic [DWIDTH-1:0] 		line_data [NUM_WAYS];
@@ -81,7 +88,7 @@ module cache_top (
 		for (i = 0; i < NUM_WAYS; i++) begin : tag_set
 			memwrap #(
 				.DWIDTH    (TAG_WIDTH),
-				.ADDR_WIDTH(ADDR_WIDTH),
+				.ADDR_WIDTH(CADR_WIDTH),
 				.DEPTH     (DEPTH)
 			) tag_memory(
 				.clk     (clk) 				,
@@ -97,7 +104,7 @@ module cache_top (
 		// for storing valids
 		for (i = 0; i < NUM_WAYS; i++) begin : valid_set
 			memwrap #(
-				.ADDR_WIDTH(ADDR_WIDTH),
+				.ADDR_WIDTH(CADR_WIDTH),
 				.DEPTH     (DEPTH),
 				.DWIDTH    (1),
 				.DEFAULT_VAL (1)
@@ -115,7 +122,7 @@ module cache_top (
 		// for storing dirty bits
 		for (i = 0; i < NUM_WAYS; i++) begin : dirty_bits
 			memwrap #(
-				.ADDR_WIDTH(ADDR_WIDTH),
+				.ADDR_WIDTH(CADR_WIDTH),
 				.DEPTH     (DEPTH),
 				.DWIDTH    (1)
 			) dirty_mem(
@@ -191,7 +198,7 @@ module cache_top (
 		o_data_valid 	= '0;
 		if(o_hit) begin
 			// 4-byte-align the offset, then convert byte index to bit index
-			o_data = line_data[target_way][{byte_offset_q[BYTE_OFF_WIDTH-1:2], 5'b0} +: INSTR_WIDTH];
+			o_data = line_data[target_way][{byte_offset_q[BYTE_OFF_WIDTH-1:OFFSET], {NUM_BLOCK{1'b0}}} +: CWIDTH];
 			o_data_valid = 1'b1;
 		end
 	end

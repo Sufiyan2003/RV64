@@ -49,7 +49,10 @@ module IF_stage
 		.i_req_valid     	(address_valid)
 	);
 
-	cache_top Icache (
+	cache_top #(
+		.CWIDTH			(32),
+		.CADR_WIDTH		(ADDR_WIDTH)
+	) Icache (
 		.clk        		(clk)				,
 		.resetn     		(resetn)			,
 		.i_data     		(cache_line_in)		, // right here

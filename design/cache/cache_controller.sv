@@ -150,4 +150,5 @@ module cache_controller (
 	// assign o_instr_addr = i_pc; 
 	assign o_write = write_line_to_cache;
 	assign write_line_to_cache = (cache_state == WRITE_TO_CACHE);
+
 endmodule : cache_controller

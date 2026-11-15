@@ -18,9 +18,9 @@ module tb;
 	initial begin
 		clk    = 0;
 		resetn = 1'b1;
-		#3ns;
+		#0.5ns;
 		resetn = 1'b0;
-		#3ns;
+		#0.5ns;
 		resetn = 1'b1;
 		#2000ns;
 		$finish;

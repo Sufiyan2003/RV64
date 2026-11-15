@@ -1,26 +1,27 @@
 /*------------------------------------------------------------------------------
 -- Author: Muhammad Sufiyan Sadiq 
--- Date: 02_08_2026
--- Description: This is the synchronous fifo
+-- Date: 15_11_2026
+-- Description: This is the synchronous fifo with a full threshold
 ------------------------------------------------------------------------------*/
 
 
 module sync_fifo #(
     parameter DEPTH=16,
-    parameter DWIDTH=32,
+    parameter DWIDTH=64,
     parameter FULL_THRESH=DEPTH-2
 ) (
     input clk                       ,
     input resetn                    ,
     input wr_en                     ,
     input rd_en                     ,
+    input flush_fifo                ,
     output empty                    ,
     output full                     ,
     input [DWIDTH-1:0] data_in      ,
     output [DWIDTH-1:0] q
 );
     
-    localparam PTR_WIDTH = $clog2(DWIDTH);
+    localparam PTR_WIDTH = $clog2(DEPTH);
     
     // allocate pointers 
     logic [PTR_WIDTH:0] rd_ptr, wr_ptr;
@@ -37,6 +38,9 @@ module sync_fifo #(
                 mem[i] <= '0;
             end
         end
+        else if(flush_fifo) begin
+            wr_ptr <= '0;
+        end
         else if(wr_en && !full) begin
             mem[wr_ptr[PTR_WIDTH-1:0]] <= data_in;
             wr_ptr <= wr_ptr + 1;
@@ -46,6 +50,9 @@ module sync_fifo #(
     // read pointer management
     always_ff @(posedge clk or negedge resetn) begin
         if(~resetn) rd_ptr <= '0;
+        else if(flush_fifo) begin
+            rd_ptr <= 1'b0;
+        end
         else if(rd_en && !empty) begin
             rd_ptr <= rd_ptr + 1;
         end

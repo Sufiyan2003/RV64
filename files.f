@@ -12,7 +12,8 @@
 // common files needed
 ./design/common/mux_2_to_1.sv
 ./design/common/mux_3_to_1.sv
-
+./design/common/register.sv
+./design/common/sync_fifo.sv
 
 // rtl defines
 ./design/core/riscv_typedefs.svh

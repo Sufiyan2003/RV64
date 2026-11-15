@@ -22,6 +22,7 @@ module RV64_core #(
 	logic 					o_read_valid 		;
 	logic 					address_valid 		;
 	logic 					o_stall_pc 			;
+	logic 					cache_ready 		;
 	logic 					o_axi_req_valid 	;
 	logic [ADDR_WIDTH-1:0] 	o_axi_req_addr 		; 
 	logic 					i_axi_rsp_ready 	;
@@ -47,11 +48,13 @@ module RV64_core #(
 		.WIDTH(64),
 		.DEFAULT_VAL(64'h8000_0000)
 	) PC(
-		.clk         (clk)			,
-		.resetn      (resetn)		,
-		.i_stall     (o_stall_pc)	,
-		.o_instr_addr(instr_addr) 	,
-		.o_req_valid (address_valid)
+		.clk         	(clk)			,
+		.resetn      	(resetn)		,
+		.i_load 		('0)			,
+		.i_counter 		('0)			,
+		.i_stall     	(o_stall_pc)	,
+		.o_instr_addr	(instr_addr) 	,
+		.o_req_valid 	(address_valid)
 	);
 
 
@@ -70,7 +73,7 @@ module RV64_core #(
 		.i_axi_rsp_line			(i_axi_rsp_line)	,
 		.address_valid			(address_valid)		,
 		.o_instruction 			(o_instruction) 	,
-		.o_instr_addr 			(if_instr_addr)		,
+		.o_instr_addr 			(if_instr_addr)		, // the o_instruction is correct
 		.o_instr_valid 			(if_instr_valid)
 	);
 
@@ -87,6 +90,47 @@ module RV64_core #(
 		.o_line_valid	(i_axi_rsp_ready)		,
 		.axi_if     	(imem_axi_if)
 	);
+
+
+	// add a mux in here to feed the next stage with nops in case of a jump or branch
+		// pipeline register
+	logic if_instr_valid_q;
+	logic [ADDR_WIDTH-1:0] instruction_q	;
+	logic [ADDR_WIDTH-1:0] next_instr		;
+
+	mux_2_to_1 #(
+		.XLEN(32)
+	) instr_mux(
+		.x				(o_instruction),
+		.y				('0),
+		.select			('0), // TODO: need to or it with the global stall
+		.out			(next_instr)
+	);
+
+	logic valid;
+	mux_2_to_1 #(
+		.XLEN(1)
+	) instr_valid_mux(
+		.x (if_instr_valid),
+		.y ('0) ,
+		.select(0),
+		.out(valid)
+	);
+
+
+
+	register #(
+		.WIDTH(33)
+	) if_id_register(
+		.clk			(clk)									,
+		.resetn			(resetn)								,
+		.din			({if_instr_valid, next_instr})			,
+		.wr_en			(1'b1)									,
+		.dout			({if_instr_valid_q, instruction_q})
+	);
+
+
+
 
 	/*------------------------------------------------------------------------------
 	--  					Instruction Decode Step
@@ -108,6 +152,13 @@ module RV64_core #(
 		.o_immediate   		(immediate)
 	);
 
+
+
+	// register #(
+	// 	.WIDTH(XLEN)
+	// ) id_ex_stage(
+		
+	// );
 
 
 	/*------------------------------------------------------------------------------

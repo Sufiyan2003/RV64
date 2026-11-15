@@ -50,19 +50,18 @@ module ram #(
             // Synchronous write, byte-enable granular
             if (we) begin
                 for (i = 0; i < 8; i = i + 1) begin
-                    if (byte_en[i]) begin
+                    if (byte_en[i])
                         mem[addr + i] <= wdata[i*8 +: 8];
-                    end
                 end
             end
 
             // Synchronous read: assemble 64-bit word from 8 consecutive bytes
-            if (re) begin
+            if (re)
                 rdata <= { mem[addr+7], mem[addr+6],
                            mem[addr+5], mem[addr+4],
                            mem[addr+3], mem[addr+2],
                            mem[addr+1], mem[addr+0] };
-            end
+            
         end
     end
 

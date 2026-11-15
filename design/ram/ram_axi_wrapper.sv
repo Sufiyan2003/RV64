@@ -34,6 +34,8 @@ module ram_axi_wrapper (
 		else         r_current_state <= r_next_state;
 	end
 
+
+	// how do i go back to the a
 	always_comb begin
 		r_next_state = r_current_state;
 		case (r_current_state)

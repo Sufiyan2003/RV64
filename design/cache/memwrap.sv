@@ -32,8 +32,8 @@ module memwrap  #(
 				mem[i] <= DEFAULT_VAL;
 			end
 		end else begin
-			if(write_en && !read_en) mem[i_addr] <= i_data;
-			else if(!write_en && read_en) o_data <= mem[i_addr];
+			if(write_en) mem[i_addr] <= i_data;
+			else if(read_en) o_data <= mem[i_addr];
 			else o_data <= o_data;
 		end
 	end

@@ -2,153 +2,156 @@
 -- Author: Muhammad Sufiyan Sadiq 
 -- Date: 02_08_2026
 -- Description: This is the cache controller module
--- 
+-- The cache can only cater for one request at a time
 ------------------------------------------------------------------------------*/
 
 `include "cache_params.svh"
 module cache_controller (
 	input 							clk					,
 	input							resetn				,
+
+	// program counter details
 	input [ADDR_WIDTH-1:0] 			i_pc				,
+	output 							cache_ready 		,
 	input 							i_req_valid 		,
-	output logic [ADDR_WIDTH-1:0]	o_instr_addr		,
-	output logic 					o_read_valid		,
+	output logic 					o_stall_pc 			,
+
+	// signals tied to the cache
+	output  [ADDR_WIDTH-1:0]		o_instr_addr		,
+	output  						o_read_valid		,
 	input							i_cache_hit			,
 	input 							i_cache_miss		,
-	output logic					o_axi_req_valid		,
+	output logic					o_write 			,
+	input 							cache_write_done	,
+	output logic [DWIDTH-1:0]		o_cache_line 		,
+
+	// signals tied to the axi requestor
+	output 							o_axi_req_valid		,
 	output [ADDR_WIDTH-1:0] 		o_axi_req_addr		,
 	input 							i_axi_rsp_ready		,
-	input  [DWIDTH-1:0] 			i_axi_rsp_line 		,
-	output logic [DWIDTH-1:0]		o_cache_line 		,
-	output logic 					o_stall_pc 			,
-	output 							o_write 			,
-	input 							cache_write_done
+	input  [DWIDTH-1:0] 			i_axi_rsp_line 		
+	
 );
 
-	logic [ADDR_WIDTH:0] pc_q 	;
-	logic propogate_fetch_req 	;
-	logic write_line_to_cache	;
 
-	logic req_accepted 			;
-	typedef enum logic [3:0] {
-	    IDLE 			, 
-	    SEARCH_CACHE 	, 
-	    CACHE_HIT 		, 
-	    CACHE_MISS 		, 
-	    FETCH 			,
-	    WRITE_TO_CACHE 	,
-	    CACHE_OUTPUT
-	} controller_state_e;
 
-	controller_state_e cache_state, cache_state_nxt;
+	//declaration of flags to indicate that the request is busy
+	logic busy, busy_q;
+	logic miss;
+	logic fetch_complete;
+	logic addr_dq;
 
-	assign req_accepted  = (cache_state == IDLE) && i_req_valid; 
-	always_ff @(posedge clk or negedge resetn) begin
-		if(~resetn) o_instr_addr <= '0;
-		else if(req_accepted) o_instr_addr <= i_pc;
-		else o_instr_addr <= o_instr_addr;
-	end
-	/*------------------------------------------------------------------------------
-	--  		Stalling PC when controller limit is reached (limit is 1)
-	------------------------------------------------------------------------------*/
-	always_comb begin
-	    if(cache_state == SEARCH_CACHE) o_read_valid = 1'b1;
-	    else 							o_read_valid = 1'b0;
-	end
+	// registers to save context
+	logic [ADDR_WIDTH-1:0] addr_q;
+	logic [ADDR_WIDTH-1:0] request_address;
 
-	// stalling the PC to give cache enough time to process address
-	// combinational now, so it tracks cache_state with zero extra delay -
-	// otherwise the PC could sneak in an extra advance the cycle IDLE->SEARCH_CACHE happens
-	always_comb begin
-	    o_stall_pc = (cache_state != IDLE);
-	end
+	logic fifo_empty;
+	logic fifo_full;
 
-	/*------------------------------------------------------------------------------
-	--  					Managing controller states
-	------------------------------------------------------------------------------*/
-	always_ff @(posedge clk or negedge resetn) begin
-	    if(~resetn) cache_state <= IDLE;
-	    else 		cache_state <= cache_state_nxt;
-	end
+	// add a synchronous fifo to store the addresses
+	sync_fifo  addr_fifo(
+		.clk			(clk),
+		.resetn			(resetn),
+		.wr_en			(i_req_valid),
+		.rd_en			(addr_dq),
+		.flush_fifo		(),
+		.empty			(fifo_empty),
+		.full			(fifo_full),
+		.data_in		(i_pc),
+		.q				(addr_q)
+	);
 
-	always_comb begin
-	    cache_state_nxt = IDLE;
-	    case (cache_state)
-	        IDLE: begin
-	            // gate on the actual incoming request, not on o_read_valid -
-	            // o_read_valid was a function of cache_state itself, so it was
-	            // always 1 in IDLE and re-triggered SEARCH_CACHE every cycle
-	            if(i_req_valid) 	cache_state_nxt = SEARCH_CACHE;
-	            else 				cache_state_nxt = IDLE;
-	        end
-	        SEARCH_CACHE: begin
-	            if(i_cache_hit) 		cache_state_nxt = CACHE_HIT;
-	            else if(i_cache_miss) 	cache_state_nxt = CACHE_MISS;
-	            else 					cache_state_nxt = SEARCH_CACHE;
-	        end
-	        CACHE_HIT: begin
-	            cache_state_nxt = IDLE;
-	        end
-	        CACHE_MISS: begin
-	            // wait till the axi responder has the full line and then move to output cache
-	            if(propogate_fetch_req) cache_state_nxt = FETCH 	;
-	            else 					 cache_state_nxt = CACHE_MISS;  
-	        end
-	        FETCH: begin
-	            if(i_axi_rsp_ready) 	cache_state_nxt = WRITE_TO_CACHE;
-	            else 					cache_state_nxt = FETCH 		;
-	        end
-	        WRITE_TO_CACHE: begin
-	            // SRAM is single-port: drop write for a cycle before the refill lookup
-	            if(cache_write_done) 	cache_state_nxt = CACHE_OUTPUT	;
-	            else 					cache_state_nxt = WRITE_TO_CACHE;
-	        end
-	        CACHE_OUTPUT: begin
-	            // write_en is still registered high this cycle; next cycle SEARCH can read
-	            cache_state_nxt = SEARCH_CACHE;
-	        end
-	        default: cache_state_nxt = IDLE;
-	    endcase
-	end
 
-	// state issue request to the axi master
+	// once the request has been serviced we can dequeue it from the fifo
 	always_ff @(posedge clk or negedge resetn) begin
 		if(~resetn) begin
-			propogate_fetch_req <= 0;
-		end else begin
-			if(cache_state == CACHE_MISS) 	propogate_fetch_req <= 1'b1;
-			else 							propogate_fetch_req <= 1'b0;
+			addr_dq <= '0;
 		end
-	end
-
-	// to the controller once it has a full line available
-	always_ff @(posedge clk or negedge resetn) begin
-		if(~resetn) begin
-			o_axi_req_valid <= 0;
-		end else begin
-			if(cache_state == CACHE_MISS && cache_state_nxt == FETCH) 	o_axi_req_valid <= 1'b1;
-			else 						o_axi_req_valid <= 1'b0;
+		else begin
+			if(i_cache_miss) addr_dq <= '0;
+			else if(i_cache_hit) addr_dq <= 1'b1;
+			else addr_dq <= '0;
 		end
 	end
 
 
-	// in case it needs to write to the cache
-	always_ff @(posedge clk or negedge resetn) begin
+	// flag management
+	always_ff @( posedge clk or negedge resetn ) begin : flag_manager_block
 		if(~resetn) begin
+			busy <= '0;
+		end
+		else begin
+			// in case of a miss the flag should read busy
+			if(i_cache_miss) 		busy <= 1'b1;
+			else if(i_cache_hit || o_write) 	busy <= 1'b0;
+			else 					busy <= busy;
+		end
+	end
+
+	// check if its fetch_complete or not
+	always_ff @(posedge clk or negedge resetn) begin
+		if(~resetn) fetch_complete <= '0;
+		else begin
+			if(i_axi_rsp_ready) fetch_complete <=  1'b1;
+			else 				fetch_complete <= 1'b0;
+		end
+	end
+
+	assign o_instr_addr = addr_q;
+
+	// assert write to memory if fetching is set
+	always_ff @(posedge clk or negedge resetn) begin
+		if(~resetn) begin 
+			o_write <= 1'b0;
 			o_cache_line <= '0;
-		end else begin
-			if(cache_state == FETCH && i_axi_rsp_ready) begin	
+		end
+		else begin
+			if(fetch_complete) begin 
+				o_write <= 1'b1;
 				o_cache_line <= i_axi_rsp_line;
+			end
+			else begin 
+				o_write <= 1'b0; 
 			end
 		end
 	end
 
+	// flop the busy flag to control o_axi_req_valid
+	always_ff @(posedge clk or negedge resetn) begin
+		if(!resetn) busy_q <= '0;
+		else busy_q <= busy;
+	end
 
-	assign o_axi_req_addr = (propogate_fetch_req == 1) ? i_pc : '0;
+	// pulse valid signal
+	assign o_axi_req_valid = busy && ~busy_q;
 
-	// TODO: must come from a fifo if cache is in miss state
-	// assign o_instr_addr = i_pc; 
-	assign o_write = write_line_to_cache;
-	assign write_line_to_cache = (cache_state == WRITE_TO_CACHE);
+	// handover the register to the axi requester
+	always_ff @(posedge clk or negedge resetn) begin
+		if(!resetn) request_address <= '0;
+		else  begin
+			if(busy) request_address <= addr_q;
+			else request_address <= request_address;
+		end
+	end
+
+
+	always_ff @(posedge clk or negedge resetn) begin
+		if(~resetn) miss <= '0;
+		else begin
+			if(i_cache_miss) miss <= 1'b1;
+			else if(o_write) miss <= 1'b0;
+			else miss <= miss;
+		end
+	end
+
+	assign o_axi_req_addr = request_address;
+	assign o_stall_pc = busy;
+
+	// tie the cache_ready combinationally
+	assign cache_ready =  (~miss || ~i_cache_miss) && ~miss && ~fifo_full;
+
+	// reassert read when response is ready from the AXI interface
+	// deassert read when there is a miss
+	assign o_read_valid = !busy_q;
 
 endmodule : cache_controller

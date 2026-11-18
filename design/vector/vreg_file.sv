@@ -49,7 +49,6 @@ module vreg_file #(
     
     // wires to connect to each reg_file (for toggling write)
     logic [NUM_REGFILES-1:0] write_reg;
-    logic [7:0] write_reg[NUM_REGFILES];
 
     // this is the output from the generated muxes to feed into each individual register file
     logic [7:0] reg_write_val[NUM_REGFILES];
@@ -107,9 +106,9 @@ module vreg_file #(
 
         // Generating the muxes to control the write values to each mux
         for(i = 0; i < NUM_REGFILES; i++) begin
-            mux_4_to_1 u_mux #(
+            mux_4_to_1 #(
                 .XLEN(8)
-            )(
+            ) u_mux (
                 .a          (i_write_val[7:0]),
                 .b          (i_write_val[(15- 8*(i % 2))  : (8 -  8*(i%2))]),
                 .c          (i_write_val[(31- 8*(i % 2))  : (24 - 8*(i%4))]),

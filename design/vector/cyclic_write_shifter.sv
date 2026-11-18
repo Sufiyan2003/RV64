@@ -14,7 +14,6 @@ module cyclic_write_shifter #(
     input                   i_start     , // this signal will tell the cyclic shifter to switch
     input                   i_shift_en  ,
     input                   i_dis_write ,
-    input                   reg_write   ,
     output [NUM_BANKS-1:0]  o_wr_en 
 );
 

@@ -3,6 +3,7 @@
 +incdir+./design/ram
 +incdir+./design/common
 +incdir+./design/core
++incdir+./design/vector
 +incdir+./design/interfaces
 +incdir+./verif
 +incdir+./verif/testbench
@@ -12,6 +13,7 @@
 // common files needed
 ./design/common/mux_2_to_1.sv
 ./design/common/mux_3_to_1.sv
+./design/common/mux_4_to_1.sv
 ./design/common/register.sv
 ./design/common/sync_fifo.sv
 
@@ -50,6 +52,12 @@
 ./design/core/EX_stage.sv
 ./design/MEM_stage.sv
 
+
+// vector dependencies
+./design/vector/cyclic_write_shifter.sv
+./design/vector/vreg_file.sv
+
+// top level wrappers
 ./design/RV64_core.sv
 ./design/RV64_soc.sv
 ./verif/testbench/tb.sv

@@ -54,6 +54,8 @@
 
 
 // vector dependencies
+./design/vector/vector_package.sv
+./design/vector/vec_instr_decoder.sv
 ./design/vector/cyclic_write_shifter.sv
 ./design/vector/vreg_file.sv
 
